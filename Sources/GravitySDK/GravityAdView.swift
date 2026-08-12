@@ -57,13 +57,14 @@ public struct GravityAdView: View {
             if let title = ad.title {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let text = ad.adText {
                 Text(text)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             HStack {
@@ -114,6 +115,10 @@ public struct GravityAdView: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .onTapGesture {
+            gravity.handleClick(ad)
+        }
         .onAppear {
             guard !impressionFired else { return }
             impressionFired = true

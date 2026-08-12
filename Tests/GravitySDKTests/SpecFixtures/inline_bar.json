@@ -1,0 +1,132 @@
+{
+  "name": "inline_bar",
+  "source": "engine spec_library",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "inline_bar",
+    "root": {
+      "type": "link",
+      "style": {
+        "display": "flex",
+        "alignItems": "center",
+        "gap": "14px",
+        "padding": "12px 6px",
+        "background": "transparent"
+      },
+      "children": [
+        {
+          "type": "image",
+          "bind": "favicon",
+          "showIf": "favicon",
+          "style": {
+            "width": "42px",
+            "height": "42px",
+            "borderRadius": "11px",
+            "objectFit": "contain",
+            "flexShrink": 0
+          }
+        },
+        {
+          "type": "box",
+          "style": {
+            "display": "flex",
+            "flexDirection": "column",
+            "gap": "3px",
+            "minWidth": "0"
+          },
+          "children": [
+            {
+              "type": "text",
+              "bind": "title",
+              "showIf": "title",
+              "style": {
+                "fontSize": "16px",
+                "fontWeight": 600,
+                "color": "hsl(var(--card-foreground))",
+                "margin": "0",
+                "lineHeight": "1.35"
+              }
+            },
+            {
+              "type": "box",
+              "style": {
+                "display": "flex",
+                "alignItems": "center",
+                "gap": "5px",
+                "minWidth": "0"
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "bind": "brandName",
+                  "showIf": "brandName",
+                  "style": {
+                    "fontSize": "12.5px",
+                    "color": "hsl(var(--muted-foreground))",
+                    "lineHeight": "1.2"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "\u00b7",
+                  "style": {
+                    "fontSize": "12.5px",
+                    "color": "hsl(var(--muted-foreground))",
+                    "lineHeight": "1.2"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Sponsored",
+                  "style": {
+                    "fontSize": "12.5px",
+                    "color": "hsl(var(--muted-foreground))",
+                    "lineHeight": "1.2"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "box",
+          "bind": "cta",
+          "showIf": "cta",
+          "style": {
+            "display": "inline-flex",
+            "alignItems": "center",
+            "gap": "4px",
+            "padding": "9px 16px",
+            "fontSize": "13px",
+            "fontWeight": 600,
+            "lineHeight": "1",
+            "whiteSpace": "nowrap",
+            "borderRadius": "999px",
+            "color": "hsl(var(--card-foreground))",
+            "background": "transparent",
+            "border": "1px solid hsl(var(--border))",
+            "flexShrink": 0,
+            "marginLeft": "auto"
+          },
+          "children": [
+            {
+              "type": "text",
+              "bind": "cta"
+            },
+            {
+              "type": "text",
+              "text": "\u203a",
+              "style": {
+                "opacity": "0.65"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

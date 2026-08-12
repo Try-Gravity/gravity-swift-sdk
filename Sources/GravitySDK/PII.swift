@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 
 /// SHA-256 hashing for PII fields, matching the normalization
 /// used by the Gravity pixel and CAPI pipeline.

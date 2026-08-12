@@ -1,0 +1,67 @@
+{
+  "name": "minimal-line",
+  "source": "observability REFERENCE_SPECS",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "minimal-line",
+    "root": {
+      "type": "link",
+      "bind": "url",
+      "style": {
+        "display": "inline-flex",
+        "alignItems": "baseline",
+        "gap": "6px",
+        "fontSize": "14px",
+        "textDecoration": "none",
+        "color": "hsl(var(--foreground))"
+      },
+      "children": [
+        {
+          "type": "text",
+          "text": "\u2197",
+          "style": {
+            "color": "hsl(var(--primary))",
+            "fontWeight": 700
+          }
+        },
+        {
+          "type": "text",
+          "bind": "title",
+          "style": {
+            "fontWeight": 500
+          }
+        },
+        {
+          "type": "text",
+          "text": "\u2014",
+          "style": {
+            "color": "hsl(var(--muted-foreground))"
+          }
+        },
+        {
+          "type": "text",
+          "bind": "cta",
+          "style": {
+            "color": "hsl(var(--primary))",
+            "fontWeight": 600
+          }
+        },
+        {
+          "type": "text",
+          "text": "Ad",
+          "style": {
+            "fontSize": "10px",
+            "textTransform": "uppercase",
+            "letterSpacing": "0.06em",
+            "color": "hsl(var(--muted-foreground))",
+            "opacity": 0.7
+          }
+        }
+      ]
+    }
+  }
+}

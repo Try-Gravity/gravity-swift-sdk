@@ -1,0 +1,15 @@
+{
+  "name": "adversarial-wrong-version",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": false,
+    "psp1": false
+  },
+  "spec": {
+    "version": 2,
+    "root": {
+      "type": "text",
+      "text": "x"
+    }
+  }
+}

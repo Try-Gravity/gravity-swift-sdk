@@ -1,0 +1,180 @@
+{
+  "name": "adversarial-depth-33",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": false,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "adversarial-depth-33",
+    "root": {
+      "type": "box",
+      "children": [
+        {
+          "type": "box",
+          "children": [
+            {
+              "type": "box",
+              "children": [
+                {
+                  "type": "box",
+                  "children": [
+                    {
+                      "type": "box",
+                      "children": [
+                        {
+                          "type": "box",
+                          "children": [
+                            {
+                              "type": "box",
+                              "children": [
+                                {
+                                  "type": "box",
+                                  "children": [
+                                    {
+                                      "type": "box",
+                                      "children": [
+                                        {
+                                          "type": "box",
+                                          "children": [
+                                            {
+                                              "type": "box",
+                                              "children": [
+                                                {
+                                                  "type": "box",
+                                                  "children": [
+                                                    {
+                                                      "type": "box",
+                                                      "children": [
+                                                        {
+                                                          "type": "box",
+                                                          "children": [
+                                                            {
+                                                              "type": "box",
+                                                              "children": [
+                                                                {
+                                                                  "type": "box",
+                                                                  "children": [
+                                                                    {
+                                                                      "type": "box",
+                                                                      "children": [
+                                                                        {
+                                                                          "type": "box",
+                                                                          "children": [
+                                                                            {
+                                                                              "type": "box",
+                                                                              "children": [
+                                                                                {
+                                                                                  "type": "box",
+                                                                                  "children": [
+                                                                                    {
+                                                                                      "type": "box",
+                                                                                      "children": [
+                                                                                        {
+                                                                                          "type": "box",
+                                                                                          "children": [
+                                                                                            {
+                                                                                              "type": "box",
+                                                                                              "children": [
+                                                                                                {
+                                                                                                  "type": "box",
+                                                                                                  "children": [
+                                                                                                    {
+                                                                                                      "type": "box",
+                                                                                                      "children": [
+                                                                                                        {
+                                                                                                          "type": "box",
+                                                                                                          "children": [
+                                                                                                            {
+                                                                                                              "type": "box",
+                                                                                                              "children": [
+                                                                                                                {
+                                                                                                                  "type": "box",
+                                                                                                                  "children": [
+                                                                                                                    {
+                                                                                                                      "type": "box",
+                                                                                                                      "children": [
+                                                                                                                        {
+                                                                                                                          "type": "box",
+                                                                                                                          "children": [
+                                                                                                                            {
+                                                                                                                              "type": "box",
+                                                                                                                              "children": [
+                                                                                                                                {
+                                                                                                                                  "type": "box",
+                                                                                                                                  "children": [
+                                                                                                                                    {
+                                                                                                                                      "type": "box",
+                                                                                                                                      "children": [
+                                                                                                                                        {
+                                                                                                                                          "type": "box"
+                                                                                                                                        }
+                                                                                                                                      ]
+                                                                                                                                    }
+                                                                                                                                  ]
+                                                                                                                                }
+                                                                                                                              ]
+                                                                                                                            }
+                                                                                                                          ]
+                                                                                                                        }
+                                                                                                                      ]
+                                                                                                                    }
+                                                                                                                  ]
+                                                                                                                }
+                                                                                                              ]
+                                                                                                            }
+                                                                                                          ]
+                                                                                                        }
+                                                                                                      ]
+                                                                                                    }
+                                                                                                  ]
+                                                                                                }
+                                                                                              ]
+                                                                                            }
+                                                                                          ]
+                                                                                        }
+                                                                                      ]
+                                                                                    }
+                                                                                  ]
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

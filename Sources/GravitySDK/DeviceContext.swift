@@ -82,11 +82,15 @@ struct DeviceContext: Sendable {
     }
 
     private static func deviceModel() -> String {
+        #if canImport(Darwin)
         var size = 0
         sysctlbyname("hw.machine", nil, &size, nil, 0)
         var machine = [CChar](repeating: 0, count: size)
         sysctlbyname("hw.machine", &machine, &size, nil, 0)
         return String(cString: machine)
+        #else
+        return "unknown"
+        #endif
     }
 
     private static func screenSize() -> (Int, Int) {

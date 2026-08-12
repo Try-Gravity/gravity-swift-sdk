@@ -1,0 +1,58 @@
+{
+  "name": "link_row",
+  "source": "engine spec_library",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "link_row",
+    "root": {
+      "type": "link",
+      "style": {
+        "display": "flex",
+        "alignItems": "center",
+        "gap": "8px",
+        "padding": "8px 6px",
+        "background": "transparent"
+      },
+      "children": [
+        {
+          "type": "image",
+          "bind": "favicon",
+          "showIf": "favicon",
+          "style": {
+            "width": "16px",
+            "height": "16px",
+            "borderRadius": "4px",
+            "objectFit": "contain",
+            "flexShrink": 0
+          }
+        },
+        {
+          "type": "text",
+          "bind": "title",
+          "showIf": "title",
+          "style": {
+            "fontSize": "14px",
+            "fontWeight": 500,
+            "lineHeight": "16px",
+            "color": "hsl(var(--primary))",
+            "textDecoration": "underline",
+            "textUnderlineOffset": "2px"
+          }
+        },
+        {
+          "type": "text",
+          "text": "Sponsored",
+          "style": {
+            "fontSize": "12px",
+            "color": "hsl(var(--muted-foreground))",
+            "lineHeight": "16px"
+          }
+        }
+      ]
+    }
+  }
+}

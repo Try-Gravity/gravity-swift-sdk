@@ -1,0 +1,27 @@
+{
+  "name": "adversarial-obfuscated-javascript-url",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": false,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "adversarial-obfuscated-javascript-url",
+    "root": {
+      "type": "box",
+      "children": [
+        {
+          "type": "link",
+          "href": " javascript:alert(1)",
+          "text": "click"
+        },
+        {
+          "type": "link",
+          "href": "java\nscript:alert(1)",
+          "text": "click"
+        }
+      ]
+    }
+  }
+}

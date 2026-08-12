@@ -1,0 +1,19 @@
+{
+  "name": "adversarial-nested-link",
+  "source": "adversarial: link node nested inside another link",
+  "expect": { "structureValid": false, "psp1": false },
+  "spec": {
+    "version": 1,
+    "name": "adversarial-nested-link",
+    "root": {
+      "type": "link",
+      "children": [
+        {
+          "type": "link",
+          "href": "https://example.com/inner",
+          "children": [{ "type": "text", "text": "Ad" }]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "adversarial-dangerous-style",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "root": {
+      "type": "text",
+      "text": "x",
+      "style": {
+        "background": "url(javascript:alert(1))",
+        "behavior": "expression(alert(1))"
+      }
+    }
+  }
+}

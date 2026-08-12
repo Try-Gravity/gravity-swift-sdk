@@ -1,0 +1,29 @@
+{
+  "name": "adversarial-giant-sizes",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "root": {
+      "type": "box",
+      "style": {
+        "padding": "500px",
+        "fontSize": "96px",
+        "gap": 64
+      },
+      "children": [
+        {
+          "type": "image",
+          "src": "https://x/y.png",
+          "style": {
+            "width": "2000px",
+            "height": 2000
+          }
+        }
+      ]
+    }
+  }
+}

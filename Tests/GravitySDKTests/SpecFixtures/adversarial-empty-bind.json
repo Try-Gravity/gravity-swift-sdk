@@ -1,0 +1,26 @@
+{
+  "name": "adversarial-empty-bind",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": true,
+    "psp1": true
+  },
+  "spec": {
+    "version": 1,
+    "root": {
+      "type": "box",
+      "children": [
+        {
+          "type": "text",
+          "bind": "cta",
+          "showIf": "cta"
+        },
+        {
+          "type": "image",
+          "bind": "favicon",
+          "showIf": "favicon"
+        }
+      ]
+    }
+  }
+}

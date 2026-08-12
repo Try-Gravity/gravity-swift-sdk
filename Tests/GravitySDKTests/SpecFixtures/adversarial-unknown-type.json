@@ -1,0 +1,24 @@
+{
+  "name": "adversarial-unknown-type",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": false,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "root": {
+      "type": "box",
+      "children": [
+        {
+          "type": "script",
+          "text": "x"
+        },
+        {
+          "type": "text",
+          "text": "ok"
+        }
+      ]
+    }
+  }
+}

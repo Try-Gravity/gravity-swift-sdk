@@ -1,0 +1,26 @@
+{
+  "name": "adversarial-unknown-bind",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": false,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "adversarial-unknown-bind",
+    "root": {
+      "type": "box",
+      "children": [
+        {
+          "type": "text",
+          "bind": "headline"
+        },
+        {
+          "type": "image",
+          "bind": "favicon",
+          "showIf": "logoUrl"
+        }
+      ]
+    }
+  }
+}

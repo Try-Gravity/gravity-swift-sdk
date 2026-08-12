@@ -1,0 +1,74 @@
+{
+  "name": "hero-banner",
+  "source": "observability REFERENCE_SPECS",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "name": "hero-banner",
+    "root": {
+      "type": "link",
+      "bind": "url",
+      "style": {
+        "display": "flex",
+        "flexDirection": "column",
+        "alignItems": "center",
+        "gap": "14px",
+        "maxWidth": "460px",
+        "padding": "36px 32px",
+        "background": "hsl(var(--primary))",
+        "color": "hsl(var(--primary-foreground))",
+        "borderRadius": "var(--radius)",
+        "textAlign": "center",
+        "textDecoration": "none"
+      },
+      "children": [
+        {
+          "type": "text",
+          "text": "Sponsored",
+          "style": {
+            "fontSize": "11px",
+            "letterSpacing": "0.18em",
+            "textTransform": "uppercase",
+            "opacity": 0.75
+          }
+        },
+        {
+          "type": "text",
+          "bind": "brandName",
+          "style": {
+            "fontSize": "40px",
+            "fontWeight": 800,
+            "letterSpacing": "-0.02em",
+            "lineHeight": 1.05
+          }
+        },
+        {
+          "type": "text",
+          "bind": "title",
+          "style": {
+            "fontSize": "15px",
+            "fontWeight": 500,
+            "opacity": 0.9,
+            "lineHeight": 1.4
+          }
+        },
+        {
+          "type": "text",
+          "bind": "cta",
+          "style": {
+            "marginTop": "8px",
+            "padding": "11px 26px",
+            "borderRadius": "999px",
+            "background": "hsl(var(--primary-foreground))",
+            "color": "hsl(var(--primary))",
+            "fontSize": "14px",
+            "fontWeight": 700
+          }
+        }
+      ]
+    }
+  }
+}

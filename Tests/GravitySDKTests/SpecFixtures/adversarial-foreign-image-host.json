@@ -1,0 +1,20 @@
+{
+  "name": "adversarial-foreign-image-host",
+  "source": "adversarial: literal image src on a non-Gravity host",
+  "expect": { "structureValid": true, "psp1": false },
+  "spec": {
+    "version": 1,
+    "name": "adversarial-foreign-image-host",
+    "root": {
+      "type": "box",
+      "children": [
+        { "type": "text", "text": "Ad" },
+        {
+          "type": "image",
+          "src": "https://evil.example.com/pixel.png",
+          "style": { "width": "20px", "height": "20px" }
+        }
+      ]
+    }
+  }
+}

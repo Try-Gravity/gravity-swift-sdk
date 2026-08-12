@@ -1,0 +1,20 @@
+{
+  "name": "adversarial-unknown-props",
+  "source": "adversarial",
+  "expect": {
+    "structureValid": true,
+    "psp1": false
+  },
+  "spec": {
+    "version": 1,
+    "root": {
+      "type": "text",
+      "text": "hello",
+      "style": {
+        "color": "$primary",
+        "futureProp": "whatever",
+        "fontSize": "14px"
+      }
+    }
+  }
+}

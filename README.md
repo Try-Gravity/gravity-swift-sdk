@@ -102,11 +102,23 @@ Gravity(
     timeoutSeconds: TimeInterval = 3.0,
     production: Bool = false,
     relevancy: Double = 0.2,
-    excludedTopics: [String]? = nil
+    excludedTopics: [String]? = nil,
+    readCMPConsent: Bool = true
 )
 ```
 
 `getAds()` never throws — returns `AdResult.empty` on any failure.
+
+### Privacy / consent
+
+If your app uses an IAB-registered CMP (OneTrust, Sourcepoint, Usercentrics, …),
+the SDK automatically forwards the user's recorded decision — the standard
+`IABTCF_TCString`, `IABTCF_gdprApplies`, and `IABUSPrivacy_String` UserDefaults
+keys — with each ad request so Gravity's serving can take it into account as
+consent enforcement rolls out server-side. No CMP keys present → no
+consent data is sent. To disable the automatic read, initialize with
+`readCMPConsent: false`; you can still pass an explicit `consent:` signal to
+`getAds()`.
 
 ## Development
 
