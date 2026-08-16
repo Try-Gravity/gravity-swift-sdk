@@ -97,6 +97,7 @@ public struct AdResponse: Codable, Sendable, Identifiable {
 /// Convenience wrapper around the ad fetch result.
 public struct AdResult: Sendable {
     public let ads: [AdResponse]
+    /// HTTP status code. `0` means no valid HTTP response was received.
     public let status: Int
     public let elapsedMs: Int
     public let error: String?

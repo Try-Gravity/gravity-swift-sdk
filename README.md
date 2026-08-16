@@ -107,7 +107,9 @@ Gravity(
 )
 ```
 
-`getAds()` never throws — returns `AdResult.empty` on any failure.
+`getAds()` never throws. A failure returns an empty ad array. If the SDK
+receives an HTTP response, the result contains its status. The SDK limits the
+diagnostic text for a non-success response.
 
 ### Privacy / consent
 

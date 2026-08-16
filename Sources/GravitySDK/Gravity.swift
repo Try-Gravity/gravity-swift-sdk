@@ -23,7 +23,9 @@ import UIKit
 /// }
 /// ```
 ///
-/// `getAds` never throws. On any failure it returns ``AdResult/empty``.
+/// `getAds` never throws. A failure returns no ads. If the SDK receives an HTTP
+/// response, the result contains its status. The SDK limits the diagnostic text
+/// for a non-success response.
 public final class Gravity: Sendable {
     public let apiKey: String
     public let apiUrl: String
@@ -58,7 +60,7 @@ public final class Gravity: Sendable {
     ///     identifiers (denial, restriction, and never-asked all fail
     ///     closed, matching Apple's tracking policy). Set `false` only if
     ///     you forward the user's opt-out state yourself via `consent:`.
-    public init(
+    public convenience init(
         apiKey: String? = nil,
         apiUrl: String = "https://server.trygravity.ai/api/v1/ad",
         feedbackUrl: String = "https://platform.trygravity.ai/ad-feedback",
@@ -68,6 +70,38 @@ public final class Gravity: Sendable {
         excludedTopics: [String]? = nil,
         readCMPConsent: Bool = true,
         honorATT: Bool = true
+    ) {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = timeoutSeconds
+        config.timeoutIntervalForResource = timeoutSeconds + 2
+
+        self.init(
+            apiKey: apiKey,
+            apiUrl: apiUrl,
+            feedbackUrl: feedbackUrl,
+            timeoutSeconds: timeoutSeconds,
+            production: production,
+            relevancy: relevancy,
+            excludedTopics: excludedTopics,
+            readCMPConsent: readCMPConsent,
+            honorATT: honorATT,
+            session: URLSession(configuration: config)
+        )
+    }
+
+    /// Tests use this initializer to supply a `URLSession`. The session keeps
+    /// test request handling local.
+    init(
+        apiKey: String? = nil,
+        apiUrl: String = "https://server.trygravity.ai/api/v1/ad",
+        feedbackUrl: String = "https://platform.trygravity.ai/ad-feedback",
+        timeoutSeconds: TimeInterval = 3.0,
+        production: Bool = false,
+        relevancy: Double = 0.2,
+        excludedTopics: [String]? = nil,
+        readCMPConsent: Bool = true,
+        honorATT: Bool = true,
+        session: URLSession
     ) {
         self.apiKey = apiKey
             ?? ProcessInfo.processInfo.environment["GRAVITY_API_KEY"]
@@ -80,18 +114,15 @@ public final class Gravity: Sendable {
         self.excludedTopics = excludedTopics
         self.readCMPConsent = readCMPConsent
         self.honorATT = honorATT
-
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = timeoutSeconds
-        config.timeoutIntervalForResource = timeoutSeconds + 2
-        self.session = URLSession(configuration: config)
+        self.session = session
     }
 
     // MARK: - Fetch ads
 
     /// Fetch contextual ads from the Gravity engine.
     ///
-    /// This method never throws. On any failure it returns ``AdResult/empty``.
+    /// This method never throws. A failure returns no ads. ``AdResult/status``
+    /// is `0` if the SDK does not receive a valid HTTP response.
     ///
     /// Unlike the server-side JS/Python SDKs, this client does not take a
     /// framework request object — it collects device signals (UA, OS, screen,
@@ -123,6 +154,20 @@ public final class Gravity: Sendable {
         consent: ConsentSignal? = nil
     ) async -> AdResult {
         let start = Date()
+
+        guard let endpoint = URL(string: apiUrl),
+              let scheme = endpoint.scheme,
+              !scheme.isEmpty,
+              let host = endpoint.host,
+              !host.isEmpty else {
+            return AdResult(
+                ads: [],
+                status: 0,
+                elapsedMs: elapsedMilliseconds(since: start),
+                error: "Invalid ad endpoint URL"
+            )
+        }
+
         do {
             let body = buildRequestBody(
                 messages: messages,
@@ -137,27 +182,69 @@ public final class Gravity: Sendable {
                 relevancy: relevancy,
                 consent: consent
             )
-            let data = try JSONSerialization.data(withJSONObject: body)
+            // Foundation can raise an Objective-C exception if the body contains
+            // an unsupported value. Check the body first to keep getAds()
+            // nonthrowing.
+            guard JSONSerialization.isValidJSONObject(body) else {
+                return AdResult(
+                    ads: [],
+                    status: 0,
+                    elapsedMs: elapsedMilliseconds(since: start),
+                    error: "Request body could not be serialized"
+                )
+            }
+            let requestData = try JSONSerialization.data(withJSONObject: body)
 
-            var request = URLRequest(url: URL(string: apiUrl)!)
+            var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = data
+            request.httpBody = requestData
 
             let (responseData, response) = try await session.data(for: request)
-            let httpResponse = response as! HTTPURLResponse
-            let elapsed = Int(-start.timeIntervalSinceNow * 1000)
+            let elapsed = elapsedMilliseconds(since: start)
 
-            if httpResponse.statusCode == 204 {
-                return AdResult(ads: [], status: 204, elapsedMs: elapsed, error: nil)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return AdResult(
+                    ads: [],
+                    status: 0,
+                    elapsedMs: elapsed,
+                    error: "Received non-HTTP response"
+                )
             }
 
-            let ads = try JSONDecoder().decode([AdResponse].self, from: responseData)
-            return AdResult(ads: ads, status: httpResponse.statusCode, elapsedMs: elapsed, error: nil)
+            let status = httpResponse.statusCode
+            guard (200..<300).contains(status) else {
+                return AdResult(
+                    ads: [],
+                    status: status,
+                    elapsedMs: elapsed,
+                    error: httpFailureDiagnostic(statusCode: status, body: responseData)
+                )
+            }
+
+            if status == 204 {
+                return AdResult(ads: [], status: status, elapsedMs: elapsed, error: nil)
+            }
+
+            do {
+                let ads = try JSONDecoder().decode([AdResponse].self, from: responseData)
+                return AdResult(ads: ads, status: status, elapsedMs: elapsed, error: nil)
+            } catch {
+                return AdResult(
+                    ads: [],
+                    status: status,
+                    elapsedMs: elapsed,
+                    error: "HTTP \(status) response could not be decoded: \(error.localizedDescription)"
+                )
+            }
         } catch {
-            let elapsed = Int(-start.timeIntervalSinceNow * 1000)
-            return AdResult(ads: [], status: 0, elapsedMs: elapsed, error: error.localizedDescription)
+            return AdResult(
+                ads: [],
+                status: 0,
+                elapsedMs: elapsedMilliseconds(since: start),
+                error: error.localizedDescription
+            )
         }
     }
 
@@ -230,6 +317,76 @@ public final class Gravity: Sendable {
     }
 
     // MARK: - Private
+
+    private static let maxHTTPFailureDiagnosticLength = 512
+
+    /// This function uses one calculation so all failure paths report elapsed time in the same way.
+    private func elapsedMilliseconds(since start: Date) -> Int {
+        Int(-start.timeIntervalSinceNow * 1000)
+    }
+
+    /// This function limits server text to prevent a large response from producing a large diagnostic.
+    private func httpFailureDiagnostic(statusCode: Int, body: Data) -> String {
+        let prefix = "HTTP \(statusCode)"
+        let separator = ": "
+        let availableTextLength = Self.maxHTTPFailureDiagnosticLength
+            - prefix.count
+            - separator.count
+        guard availableTextLength > 1,
+              let normalized = normalizedUTF8Text(
+                  from: body,
+                  maxRetainedLength: availableTextLength - 1
+              ),
+              !normalized.text.isEmpty else {
+            return prefix
+        }
+
+        let suffix = normalized.wasTruncated ? "…" : ""
+        return "\(prefix)\(separator)\(normalized.text)\(suffix)"
+    }
+
+    /// This function checks the complete body so the SDK rejects text with invalid trailing UTF-8.
+    /// It stores only a limited prefix to keep the diagnostic small.
+    private func normalizedUTF8Text(
+        from body: Data,
+        maxRetainedLength: Int
+    ) -> (text: String, wasTruncated: Bool)? {
+        var decoder = UTF8()
+        var iterator = body.makeIterator()
+        var text = String()
+        text.reserveCapacity(maxRetainedLength)
+        var retainedScalarCount = 0
+        var pendingWhitespace = false
+        var wasTruncated = false
+
+        while true {
+            switch decoder.decode(&iterator) {
+            case let .scalarValue(scalar):
+                if scalar.properties.isWhitespace {
+                    pendingWhitespace = true
+                    continue
+                }
+
+                let needsSeparator = pendingWhitespace && !text.isEmpty
+                let requiredScalarCount = (needsSeparator ? 1 : 0) + 1
+                if !wasTruncated && retainedScalarCount + requiredScalarCount <= maxRetainedLength {
+                    if needsSeparator {
+                        text.unicodeScalars.append(" ")
+                        retainedScalarCount += 1
+                    }
+                    text.unicodeScalars.append(scalar)
+                    retainedScalarCount += 1
+                } else {
+                    wasTruncated = true
+                }
+                pendingWhitespace = false
+            case .emptyInput:
+                return (text: text, wasTruncated: wasTruncated)
+            case .error:
+                return nil
+            }
+        }
+    }
 
     func buildRequestBody(
         messages: [Message],
