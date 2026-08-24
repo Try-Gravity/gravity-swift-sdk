@@ -22,7 +22,7 @@ Zero third-party dependencies — uses Foundation, CryptoKit, and URLSession.
 Add via Swift Package Manager in Xcode (**File → Add Package Dependencies**):
 
 ```
-https://github.com/Try-Gravity/gravity
+https://github.com/Try-Gravity/gravity-swift-sdk
 ```
 
 Select the `GravitySDK` library product.
@@ -31,7 +31,7 @@ Or in `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Try-Gravity/gravity", from: "1.0.0"),
+    .package(url: "https://github.com/Try-Gravity/gravity-swift-sdk", from: "1.0.0"),
 ]
 ```
 
@@ -107,7 +107,7 @@ Gravity(
 )
 ```
 
-`getAds()` never throws — returns `AdResult.empty` on any failure.
+`getAds()` never throws. Failures before an HTTP response return status `0`; HTTP responses preserve their status code.
 
 ### Privacy / consent
 

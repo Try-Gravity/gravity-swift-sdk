@@ -23,7 +23,9 @@ import UIKit
 /// }
 /// ```
 ///
-/// `getAds` never throws. On any failure it returns ``AdResult/empty``.
+/// `getAds` never throws. A failure before receiving an HTTP response has
+/// status `0`; HTTP responses preserve their status code and include an
+/// error when appropriate.
 public final class Gravity: Sendable {
     public let apiKey: String
     public let apiUrl: String
@@ -58,7 +60,7 @@ public final class Gravity: Sendable {
     ///     identifiers (denial, restriction, and never-asked all fail
     ///     closed, matching Apple's tracking policy). Set `false` only if
     ///     you forward the user's opt-out state yourself via `consent:`.
-    public init(
+    public convenience init(
         apiKey: String? = nil,
         apiUrl: String = "https://server.trygravity.ai/api/v1/ad",
         feedbackUrl: String = "https://platform.trygravity.ai/ad-feedback",
@@ -68,6 +70,35 @@ public final class Gravity: Sendable {
         excludedTopics: [String]? = nil,
         readCMPConsent: Bool = true,
         honorATT: Bool = true
+    ) {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = timeoutSeconds
+        config.timeoutIntervalForResource = timeoutSeconds + 2
+        self.init(
+            apiKey: apiKey,
+            apiUrl: apiUrl,
+            feedbackUrl: feedbackUrl,
+            timeoutSeconds: timeoutSeconds,
+            production: production,
+            relevancy: relevancy,
+            excludedTopics: excludedTopics,
+            readCMPConsent: readCMPConsent,
+            honorATT: honorATT,
+            session: URLSession(configuration: config)
+        )
+    }
+
+    internal init(
+        apiKey: String? = nil,
+        apiUrl: String = "https://server.trygravity.ai/api/v1/ad",
+        feedbackUrl: String = "https://platform.trygravity.ai/ad-feedback",
+        timeoutSeconds: TimeInterval = 3.0,
+        production: Bool = false,
+        relevancy: Double = 0.2,
+        excludedTopics: [String]? = nil,
+        readCMPConsent: Bool = true,
+        honorATT: Bool = true,
+        session: URLSession
     ) {
         self.apiKey = apiKey
             ?? ProcessInfo.processInfo.environment["GRAVITY_API_KEY"]
@@ -80,18 +111,15 @@ public final class Gravity: Sendable {
         self.excludedTopics = excludedTopics
         self.readCMPConsent = readCMPConsent
         self.honorATT = honorATT
-
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = timeoutSeconds
-        config.timeoutIntervalForResource = timeoutSeconds + 2
-        self.session = URLSession(configuration: config)
+        self.session = session
     }
 
     // MARK: - Fetch ads
 
     /// Fetch contextual ads from the Gravity engine.
     ///
-    /// This method never throws. On any failure it returns ``AdResult/empty``.
+    /// This method never throws. Failures before an HTTP response return
+    /// status `0`; HTTP responses preserve their status code.
     ///
     /// Unlike the server-side JS/Python SDKs, this client does not take a
     /// framework request object — it collects device signals (UA, OS, screen,
@@ -137,24 +165,75 @@ public final class Gravity: Sendable {
                 relevancy: relevancy,
                 consent: consent
             )
-            let data = try JSONSerialization.data(withJSONObject: body)
+            guard JSONSerialization.isValidJSONObject(body),
+                  let data = try? JSONSerialization.data(withJSONObject: body)
+            else {
+                let elapsed = Int(-start.timeIntervalSinceNow * 1000)
+                return AdResult(
+                    ads: [],
+                    status: 0,
+                    elapsedMs: elapsed,
+                    error: "Request body could not be serialized"
+                )
+            }
 
-            var request = URLRequest(url: URL(string: apiUrl)!)
+            guard let url = URL(string: apiUrl) else {
+                let elapsed = Int(-start.timeIntervalSinceNow * 1000)
+                return AdResult(
+                    ads: [],
+                    status: 0,
+                    elapsedMs: elapsed,
+                    error: "Invalid ad endpoint URL"
+                )
+            }
+
+            var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = data
 
             let (responseData, response) = try await session.data(for: request)
-            let httpResponse = response as! HTTPURLResponse
             let elapsed = Int(-start.timeIntervalSinceNow * 1000)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return AdResult(
+                    ads: [],
+                    status: 0,
+                    elapsedMs: elapsed,
+                    error: "Received non-HTTP response"
+                )
+            }
 
             if httpResponse.statusCode == 204 {
                 return AdResult(ads: [], status: 204, elapsedMs: elapsed, error: nil)
             }
 
-            let ads = try JSONDecoder().decode([AdResponse].self, from: responseData)
-            return AdResult(ads: ads, status: httpResponse.statusCode, elapsedMs: elapsed, error: nil)
+            guard (200...299).contains(httpResponse.statusCode) else {
+                return AdResult(
+                    ads: [],
+                    status: httpResponse.statusCode,
+                    elapsedMs: elapsed,
+                    error: httpError(statusCode: httpResponse.statusCode, body: responseData)
+                )
+            }
+
+            do {
+                let ads = try JSONDecoder().decode([AdResponse].self, from: responseData)
+                return AdResult(
+                    ads: ads,
+                    status: httpResponse.statusCode,
+                    elapsedMs: elapsed,
+                    error: nil
+                )
+            } catch {
+                return AdResult(
+                    ads: [],
+                    status: httpResponse.statusCode,
+                    elapsedMs: elapsed,
+                    error: "Failed to decode ad response: \(error.localizedDescription)"
+                )
+            }
         } catch {
             let elapsed = Int(-start.timeIntervalSinceNow * 1000)
             return AdResult(ads: [], status: 0, elapsedMs: elapsed, error: error.localizedDescription)
@@ -210,8 +289,14 @@ public final class Gravity: Sendable {
                 if let p = ad.placement { body["placement"] = p }
                 if let pid = ad.placementId { body["placementId"] = pid }
 
-                let data = try JSONSerialization.data(withJSONObject: body)
-                var request = URLRequest(url: URL(string: feedbackUrl)!)
+                guard JSONSerialization.isValidJSONObject(body),
+                      let data = try? JSONSerialization.data(withJSONObject: body),
+                      let url = URL(string: feedbackUrl)
+                else {
+                    return
+                }
+
+                var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -230,6 +315,23 @@ public final class Gravity: Sendable {
     }
 
     // MARK: - Private
+
+    private func httpError(statusCode: Int, body: Data) -> String {
+        guard let text = String(data: body, encoding: .utf8) else {
+            return "HTTP \(statusCode)"
+        }
+
+        let normalized = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !normalized.isEmpty else {
+            return "HTTP \(statusCode)"
+        }
+
+        let message = "HTTP \(statusCode): \(normalized)"
+        guard message.count > 512 else {
+            return message
+        }
+        return String(message.prefix(512))
+    }
 
     func buildRequestBody(
         messages: [Message],
