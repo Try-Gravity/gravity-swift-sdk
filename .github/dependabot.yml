@@ -1,0 +1,42 @@
+version: 2
+updates:
+- package-ecosystem: github-actions
+  directory: /
+  schedule:
+    interval: weekly
+    day: monday
+    time: '06:00'
+    timezone: America/Los_Angeles
+  open-pull-requests-limit: 5
+  labels:
+  - dependencies
+  - no-automerge
+  groups:
+    github-actions-version-updates:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    github-actions-security-updates:
+      applies-to: security-updates
+      patterns:
+      - '*'
+- package-ecosystem: swift
+  directory: /
+  schedule:
+    interval: weekly
+    day: monday
+    time: '06:00'
+    timezone: America/Los_Angeles
+  open-pull-requests-limit: 5
+  labels:
+  - dependencies
+  - no-automerge
+  groups:
+    swift-version-updates:
+      applies-to: version-updates
+      patterns:
+      - '*'
+    swift-security-updates:
+      applies-to: security-updates
+      patterns:
+      - '*'
