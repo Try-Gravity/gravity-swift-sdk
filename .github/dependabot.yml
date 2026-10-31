@@ -14,6 +14,9 @@ updates:
   groups:
     github-actions-version-updates:
       applies-to: version-updates
+      update-types:
+      - minor
+      - patch
       patterns:
       - '*'
     github-actions-security-updates:
@@ -34,6 +37,9 @@ updates:
   groups:
     swift-version-updates:
       applies-to: version-updates
+      update-types:
+      - minor
+      - patch
       patterns:
       - '*'
     swift-security-updates:
