@@ -15,7 +15,8 @@ private struct AdFrameKey: PreferenceKey {
 /// UIKit twin of the ad's frame: it knows its hosting window and the clips
 /// above it (clipping views such as scroll views, and layer masks, which is
 /// how SwiftUI's `.clipped()`/`.clipShape` reach a hosted platform view),
-/// which SwiftUI's global frame does not.
+/// which SwiftUI's global frame does not. A clip it can't measure makes the
+/// ad count as not viewable.
 private final class AdProbeView: UIView {
     var onRefresh: (() -> Void)?
     var isPolling = true { didSet { updatePollTimer() } }
@@ -52,7 +53,9 @@ private final class AdProbeView: UIView {
             if view.clipsToBounds {
                 let rect = view.convert(view.bounds, to: window)
                 let radius = view.layer.cornerRadius
-                if radius > 0 {
+                if radius > 0 && view.layer.maskedCorners != [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner] {
+                    clips.append(.unmeasurable)
+                } else if radius > 0 {
                     let path = UIBezierPath(roundedRect: view.bounds, cornerRadius: radius)
                     clips.append(.shape(bounds: rect) { path.contains(view.convert($0, from: window)) })
                 } else {
@@ -63,7 +66,12 @@ private final class AdProbeView: UIView {
                 let frame = mask.frame
                 if frame.isEmpty || frame.isInfinite {
                     clips.append(.unmeasurable)
-                } else if let shape = mask as? CAShapeLayer, let path = shape.path {
+                } else if let shape = mask as? CAShapeLayer {
+                    guard let path = shape.path else {
+                        clips.append(.unmeasurable)
+                        ancestor = view.superview
+                        continue
+                    }
                     let rule: CGPathFillRule = shape.fillRule == .evenOdd ? .evenOdd : .winding
                     clips.append(.shape(bounds: view.convert(frame, to: window)) {
                         let point = view.convert($0, from: window)
@@ -71,8 +79,10 @@ private final class AdProbeView: UIView {
                             CGPoint(x: point.x - frame.minX, y: point.y - frame.minY), using: rule
                         )
                     })
-                } else {
+                } else if mask.contents == nil && mask.sublayers == nil && mask.cornerRadius == 0 {
                     clips.append(.rect(view.convert(frame, to: window)))
+                } else {
+                    clips.append(.unmeasurable)
                 }
             }
             ancestor = view.superview
@@ -85,6 +95,7 @@ private final class AdProbeView: UIView {
 
 private final class AdProbeBox {
     weak var view: AdProbeView?
+    var measuredKey: String?
 }
 
 private struct AdProbe: UIViewRepresentable {
@@ -106,7 +117,7 @@ private struct AdProbe: UIViewRepresentable {
 }
 #endif
 
-private struct ViewableImpressionModifier: ViewModifier {
+private struct ViewabilityModifier: ViewModifier {
     let ad: AdResponse
     let gravity: Gravity
 
@@ -138,30 +149,42 @@ private struct ViewableImpressionModifier: ViewModifier {
             }
             .task(id: ad.impUrl) {
                 tracker.setAd(key: ad.impUrl) { [ad, gravity] in
-                    gravity.trackImpression(ad)
+                    gravity.sendViewabilityBeacon(ad, event: .viewable)
                     isPolling = false
                 }
                 isPolling = ad.impUrl != nil && !tracker.fired
             }
             .task(id: scenePhase) { tracker.isActive = scenePhase == .active }
-            .onAppear { tracker.isAttached = true }
+            .onAppear {
+                tracker.isAttached = true
+                sendMeasured()
+            }
             .onDisappear { tracker.isAttached = false }
+    }
+
+    private func sendMeasured() {
+        #if !os(watchOS)
+        guard probe.view?.window != nil, probe.measuredKey != ad.impUrl else { return }
+        probe.measuredKey = ad.impUrl
+        #endif
+        gravity.sendViewabilityBeacon(ad, event: .measured)
     }
 
     #if !os(watchOS)
     private func refreshVisibleFraction() {
         tracker.visibleFraction = probe.view?.visibleFraction ?? 0
+        sendMeasured()
     }
     #endif
 }
 
 extension View {
-    /// Fires `gravity.trackImpression(ad)` once the ad has been at least 50%
-    /// visible for 1 continuous second while the scene is active (MRC viewable).
-    /// Visibility is measured against the ad's own window and its clipping
-    /// ancestors (iOS/tvOS), or the screen (watchOS).
-    func trackViewableImpression(of ad: AdResponse, gravity: Gravity) -> some View {
-        modifier(ViewableImpressionModifier(ad: ad, gravity: gravity))
+    /// Shadow-measures MRC viewability for `ad`: sends the `measured` beacon when
+    /// the SDK can measure the ad, and `viewable` once at least 50% has been in
+    /// view for 1 continuous second while the scene is active. It never affects
+    /// the billed impression pixel.
+    func trackViewability(of ad: AdResponse, gravity: Gravity) -> some View {
+        modifier(ViewabilityModifier(ad: ad, gravity: gravity))
     }
 }
 #endif

@@ -251,6 +251,16 @@ public final class Gravity: Sendable {
         Task { _ = try? await session.data(from: url) }
     }
 
+    /// Send a shadow viewability beacon for `ad`. At most once per event and
+    /// impression URL per process. Fire-and-forget; never affects billing.
+    func sendViewabilityBeacon(_ ad: AdResponse, event: ViewabilityBeacon.Event) {
+        guard let impUrl = ad.impUrl,
+              let url = ViewabilityBeacon.url(impUrl: impUrl, event: event),
+              ViewabilityBeacon.sent.insert("\(event.rawValue)|\(impUrl)")
+        else { return }
+        Task { _ = try? await session.data(from: url) }
+    }
+
     // MARK: - Click handling
 
     /// Open the ad's tracked click URL. Routes through Gravity tracking,

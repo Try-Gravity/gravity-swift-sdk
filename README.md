@@ -71,12 +71,14 @@ if let ad = ads.first {
 }
 ```
 
-`GravityAdView` handles impression tracking, click handling, and feedback UI. The impression pixel fires once 50% of the ad has been visible for 1 continuous second (MRC viewable), and only while the app is active.
+`GravityAdView` handles impression tracking, click handling, and feedback UI.
+
+The impression pixel (`impUrl`) fires exactly as before, when the ad appears, and billing is unchanged. The SDK also sends a separate shadow viewability beacon: `ev=measured` when it can measure the ad's visibility, and `ev=viewable` once at least 50% of the ad has been in view for 1 continuous second while the app is active (MRC viewable). The beacon is measurement only and never affects billing.
 
 ### Custom rendering
 
 ```swift
-// Fire impression once the ad is viewable (50% visible for 1 continuous second)
+// Fire impression once when the ad becomes visible
 gravity.trackImpression(ad)
 
 // Always use clickUrl for links
