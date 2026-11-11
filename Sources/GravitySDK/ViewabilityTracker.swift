@@ -60,6 +60,10 @@ final class ViewabilityTracker {
         evaluate()
     }
 
+    static func isMeasurable(_ clips: [ViewClip]) -> Bool {
+        !clips.contains { if case .unmeasurable = $0 { return true } else { return false } }
+    }
+
     static func visibleFraction(
         of frame: CGRect, in viewport: CGRect, clippedBy clips: [ViewClip] = []
     ) -> Double {

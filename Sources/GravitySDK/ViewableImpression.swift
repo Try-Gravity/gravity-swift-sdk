@@ -45,8 +45,8 @@ private final class AdProbeView: UIView {
 
     deinit { pollTimer?.invalidate() }
 
-    var visibleFraction: Double {
-        guard let window else { return 0 }
+    var measurement: (fraction: Double, isMeasurable: Bool) {
+        guard let window else { return (0, false) }
         var clips: [ViewClip] = []
         var ancestor: UIView? = self
         while let view = ancestor, view !== window {
@@ -87,9 +87,10 @@ private final class AdProbeView: UIView {
             }
             ancestor = view.superview
         }
-        return ViewabilityTracker.visibleFraction(
+        let fraction = ViewabilityTracker.visibleFraction(
             of: convert(bounds, to: window), in: window.bounds, clippedBy: clips
         )
+        return (fraction, ViewabilityTracker.isMeasurable(clips))
     }
 }
 
@@ -164,7 +165,7 @@ private struct ViewabilityModifier: ViewModifier {
 
     private func sendMeasured() {
         #if !os(watchOS)
-        guard probe.view?.window != nil, probe.measuredKey != ad.impUrl else { return }
+        guard probe.view?.measurement.isMeasurable == true, probe.measuredKey != ad.impUrl else { return }
         probe.measuredKey = ad.impUrl
         #endif
         gravity.sendViewabilityBeacon(ad, event: .measured)
@@ -172,7 +173,7 @@ private struct ViewabilityModifier: ViewModifier {
 
     #if !os(watchOS)
     private func refreshVisibleFraction() {
-        tracker.visibleFraction = probe.view?.visibleFraction ?? 0
+        tracker.visibleFraction = probe.view?.measurement.fraction ?? 0
         sendMeasured()
     }
     #endif

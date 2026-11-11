@@ -175,6 +175,8 @@ final class ViewabilityTrackerTests: XCTestCase {
         let fraction = ViewabilityTracker.visibleFraction(
             of: ad, in: viewport, clippedBy: [.rect(viewport), .unmeasurable])
         XCTAssertEqual(fraction, 0)
+        XCTAssertTrue(ViewabilityTracker.isMeasurable([.rect(viewport)]))
+        XCTAssertFalse(ViewabilityTracker.isMeasurable([.rect(viewport), .unmeasurable]))
 
         tracker.visibleFraction = fraction
         clock.advance(ms: 5000)
