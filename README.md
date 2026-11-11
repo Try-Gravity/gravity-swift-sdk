@@ -71,12 +71,12 @@ if let ad = ads.first {
 }
 ```
 
-`GravityAdView` handles impression tracking, click handling, and feedback UI.
+`GravityAdView` handles impression tracking, click handling, and feedback UI. The impression pixel fires once 50% of the ad has been visible for 1 continuous second (MRC viewable), and only while the app is active.
 
 ### Custom rendering
 
 ```swift
-// Fire impression once when the ad becomes visible
+// Fire impression once the ad is viewable (50% visible for 1 continuous second)
 gravity.trackImpression(ad)
 
 // Always use clickUrl for links

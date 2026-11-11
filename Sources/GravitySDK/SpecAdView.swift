@@ -11,9 +11,9 @@ import UIKit
 /// nodes > 400, version ≠ 1), the SDK's built-in ``GravityAdView`` renders
 /// instead — an invalid spec can never crash or blank the host app.
 ///
-/// Tracking parity with ``GravityAdView``: fires the impression pixel once on
-/// first appearance, and routes link taps through `gravity.handleClick`
-/// (the tracked `clickUrl`). Bound links (e.g. `bind: "url"`) always use the
+/// Tracking parity with ``GravityAdView``: fires the impression pixel once the
+/// ad has been 50% visible for 1 continuous second (MRC viewable), and routes
+/// link taps through `gravity.handleClick` (the tracked `clickUrl`). Bound links (e.g. `bind: "url"`) always use the
 /// tracked clickUrl; only a literal `href` on a Gravity-controlled `https`
 /// host opens directly — any other destination routes through the clickUrl.
 ///
@@ -29,7 +29,6 @@ public struct SpecAdView: View {
     private let spec: RendererSpec?
     private let specHasDisclosure: Bool
 
-    @State private var impressionFired = false
     @State private var feedbackSent = false
 
     public init(
@@ -117,13 +116,9 @@ public struct SpecAdView: View {
                     }
                 }
             }
-            .onAppear {
-                guard !impressionFired else { return }
-                impressionFired = true
-                gravity.trackImpression(ad)
-            }
+            .trackViewableImpression(of: ad, gravity: gravity)
         } else {
-            // GravityAdView fires its own impression pixel on appear and
+            // GravityAdView tracks its own viewable impression and
             // owns the feedback chrome on the fallback path.
             GravityAdView(ad: ad, gravity: gravity, sessionId: sessionId, showFeedback: showFeedback)
         }

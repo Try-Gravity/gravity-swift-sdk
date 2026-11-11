@@ -7,15 +7,15 @@ import SwiftUI
 /// GravityAdView(ad: ad, gravity: gravity, sessionId: sessionId)
 /// ```
 ///
-/// Fires the impression pixel the first time it appears on screen
-/// and routes clicks through the tracked `clickUrl`.
+/// Fires the impression pixel once at least 50% of the ad has been visible
+/// for 1 continuous second (MRC viewable) and routes clicks through the
+/// tracked `clickUrl`.
 public struct GravityAdView: View {
     private let ad: AdResponse
     private let gravity: Gravity
     private let sessionId: String
     private let showFeedback: Bool
 
-    @State private var impressionFired = false
     @State private var feedbackSent = false
 
     public init(
@@ -119,11 +119,7 @@ public struct GravityAdView: View {
         .onTapGesture {
             gravity.handleClick(ad)
         }
-        .onAppear {
-            guard !impressionFired else { return }
-            impressionFired = true
-            gravity.trackImpression(ad)
-        }
+        .trackViewableImpression(of: ad, gravity: gravity)
     }
 }
 #endif
