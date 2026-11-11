@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// MRC viewable-impression thresholds: at least 50% of the ad's pixels in view
 /// for 1 continuous second.

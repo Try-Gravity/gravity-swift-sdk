@@ -11,24 +11,59 @@ private struct AdFrameKey: PreferenceKey {
     }
 }
 
-private extension ViewabilityTracker {
-    static var viewport: CGRect {
-        #if os(watchOS)
-        return WKInterfaceDevice.current().screenBounds
-        #else
-        return UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }?
-            .windows.first { $0.isKeyWindow }?.bounds ?? .zero
-        #endif
+#if !os(watchOS)
+/// UIKit twin of the ad's frame: it knows its hosting window and
+/// the clipping ancestors (e.g. a scroll view), which SwiftUI's global frame
+/// does not.
+private final class AdProbeView: UIView {
+    var onMoveToWindow: (() -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        onMoveToWindow?()
+    }
+
+    var visibleFraction: Double {
+        guard let window else { return 0 }
+        var clip = window.bounds
+        var ancestor = superview
+        while let view = ancestor, view !== window {
+            if view.clipsToBounds { clip = clip.intersection(view.convert(view.bounds, to: window)) }
+            ancestor = view.superview
+        }
+        return ViewabilityTracker.visibleFraction(of: convert(bounds, to: window), in: clip)
     }
 }
+
+private final class AdProbeBox {
+    weak var view: AdProbeView?
+}
+
+private struct AdProbe: UIViewRepresentable {
+    let box: AdProbeBox
+    let onMoveToWindow: () -> Void
+
+    func makeUIView(context: Context) -> AdProbeView {
+        let view = AdProbeView()
+        view.isUserInteractionEnabled = false
+        box.view = view
+        return view
+    }
+
+    func updateUIView(_ view: AdProbeView, context: Context) {
+        view.onMoveToWindow = onMoveToWindow
+    }
+}
+#endif
 
 private struct ViewableImpressionModifier: ViewModifier {
     let ad: AdResponse
     let gravity: Gravity
 
     @State private var tracker = ViewabilityTracker()
+    #if !os(watchOS)
+    @State private var probe = AdProbeBox()
+    #endif
     @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
@@ -38,10 +73,17 @@ private struct ViewableImpressionModifier: ViewModifier {
                     Color.clear.preference(key: AdFrameKey.self, value: proxy.frame(in: .global))
                 }
             )
+            #if !os(watchOS)
+            .background(AdProbe(box: probe, onMoveToWindow: refreshVisibleFraction))
+            #endif
             .onPreferenceChange(AdFrameKey.self) { frame in
+                #if os(watchOS)
                 tracker.visibleFraction = ViewabilityTracker.visibleFraction(
-                    of: frame, in: ViewabilityTracker.viewport
+                    of: frame, in: WKInterfaceDevice.current().screenBounds
                 )
+                #else
+                refreshVisibleFraction()
+                #endif
             }
             .task(id: ad.impUrl) {
                 tracker.setAd(key: ad.impUrl) { [ad, gravity] in gravity.trackImpression(ad) }
@@ -50,11 +92,19 @@ private struct ViewableImpressionModifier: ViewModifier {
             .onAppear { tracker.isAttached = true }
             .onDisappear { tracker.isAttached = false }
     }
+
+    #if !os(watchOS)
+    private func refreshVisibleFraction() {
+        tracker.visibleFraction = probe.view?.visibleFraction ?? 0
+    }
+    #endif
 }
 
 extension View {
     /// Fires `gravity.trackImpression(ad)` once the ad has been at least 50%
     /// visible for 1 continuous second while the scene is active (MRC viewable).
+    /// Visibility is measured against the ad's own window and its clipping
+    /// ancestors (iOS/tvOS), or the screen (watchOS).
     func trackViewableImpression(of ad: AdResponse, gravity: Gravity) -> some View {
         modifier(ViewableImpressionModifier(ad: ad, gravity: gravity))
     }
