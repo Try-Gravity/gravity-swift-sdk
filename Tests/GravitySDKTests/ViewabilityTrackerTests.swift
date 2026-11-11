@@ -114,6 +114,43 @@ final class ViewabilityTrackerTests: XCTestCase {
         XCTAssertEqual(fired, 10)
     }
 
+    func testClipRectLimitsVisibleFraction() {
+        let viewport = CGRect(x: 0, y: 0, width: 400, height: 400)
+        let ad = CGRect(x: 0, y: 0, width: 100, height: 100)
+        XCTAssertEqual(ViewabilityTracker.visibleFraction(of: ad, in: viewport), 1, accuracy: 1e-9)
+
+        let clippedToTop40 = ViewClip.rect(CGRect(x: 0, y: 0, width: 100, height: 40))
+        let fraction = ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [clippedToTop40])
+        XCTAssertEqual(fraction, 0.4, accuracy: 1e-9)
+
+        tracker.visibleFraction = fraction
+        clock.advance(ms: 5000)
+        XCTAssertEqual(fired, 0)
+    }
+
+    func testClipsCombineAndDisjointClipHidesAd() {
+        let viewport = CGRect(x: 0, y: 0, width: 400, height: 400)
+        let ad = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let topHalf = ViewClip.rect(CGRect(x: 0, y: 0, width: 100, height: 50))
+        let leftHalf = ViewClip.rect(CGRect(x: 0, y: 0, width: 50, height: 100))
+        XCTAssertEqual(
+            ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [topHalf, leftHalf]), 0.25, accuracy: 1e-9)
+        XCTAssertEqual(
+            ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [.rect(CGRect(x: 0, y: 200, width: 100, height: 100))]), 0)
+    }
+
+    func testUnmeasurableClipIsNotViewable() {
+        let viewport = CGRect(x: 0, y: 0, width: 400, height: 400)
+        let ad = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let fraction = ViewabilityTracker.visibleFraction(
+            of: ad, in: viewport, clippedBy: [.rect(viewport), .unmeasurable])
+        XCTAssertEqual(fraction, 0)
+
+        tracker.visibleFraction = fraction
+        clock.advance(ms: 5000)
+        XCTAssertEqual(fired, 0)
+    }
+
     func testVisibleFractionOfFrameInViewport() {
         let viewport = CGRect(x: 0, y: 0, width: 100, height: 100)
         XCTAssertEqual(

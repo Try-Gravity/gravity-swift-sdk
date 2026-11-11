@@ -11,6 +11,13 @@ enum Viewability {
     static let pollInterval: TimeInterval = 0.1
 }
 
+/// A region that clips an ad. A clip whose extent can't be read is
+/// `unmeasurable`, and an ad behind one is treated as not viewable.
+enum ViewClip: Equatable {
+    case rect(CGRect)
+    case unmeasurable
+}
+
 /// Decides when an ad counts as a viewable impression. Feed it the ad's
 /// visible fraction and the foreground/attached state; it starts a
 /// `Viewability.dwell` timer when the ad is in view, cancels it as soon as the
@@ -49,10 +56,19 @@ final class ViewabilityTracker {
         evaluate()
     }
 
-    static func visibleFraction(of frame: CGRect, in viewport: CGRect) -> Double {
+    static func visibleFraction(
+        of frame: CGRect, in viewport: CGRect, clippedBy clips: [ViewClip] = []
+    ) -> Double {
         let area = frame.width * frame.height
         guard area > 0 else { return 0 }
-        let visible = frame.intersection(viewport)
+        var region = viewport
+        for clip in clips {
+            switch clip {
+            case .unmeasurable: return 0
+            case .rect(let rect): region = region.intersection(rect)
+            }
+        }
+        let visible = frame.intersection(region)
         guard !visible.isNull else { return 0 }
         return Double((visible.width * visible.height) / area)
     }

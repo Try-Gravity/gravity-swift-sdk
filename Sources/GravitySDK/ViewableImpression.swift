@@ -12,9 +12,10 @@ private struct AdFrameKey: PreferenceKey {
 }
 
 #if !os(watchOS)
-/// UIKit twin of the ad's frame: it knows its hosting window and
-/// the clipping ancestors (e.g. a scroll view), which SwiftUI's global frame
-/// does not.
+/// UIKit twin of the ad's frame: it knows its hosting window and the clips
+/// above it (clipping views such as scroll views, and layer masks, which is
+/// how SwiftUI's `.clipped()`/`.clipShape` reach a hosted platform view),
+/// which SwiftUI's global frame does not.
 private final class AdProbeView: UIView {
     var onRefresh: (() -> Void)?
     var isPolling = true { didSet { updatePollTimer() } }
@@ -45,13 +46,19 @@ private final class AdProbeView: UIView {
 
     var visibleFraction: Double {
         guard let window else { return 0 }
-        var clip = window.bounds
-        var ancestor = superview
+        var clips: [ViewClip] = []
+        var ancestor: UIView? = self
         while let view = ancestor, view !== window {
-            if view.clipsToBounds { clip = clip.intersection(view.convert(view.bounds, to: window)) }
+            if view.clipsToBounds { clips.append(.rect(view.convert(view.bounds, to: window))) }
+            if let mask = view.layer.mask {
+                let frame = mask.frame
+                clips.append(frame.isEmpty || frame.isInfinite ? .unmeasurable : .rect(view.convert(frame, to: window)))
+            }
             ancestor = view.superview
         }
-        return ViewabilityTracker.visibleFraction(of: convert(bounds, to: window), in: clip)
+        return ViewabilityTracker.visibleFraction(
+            of: convert(bounds, to: window), in: window.bounds, clippedBy: clips
+        )
     }
 }
 
