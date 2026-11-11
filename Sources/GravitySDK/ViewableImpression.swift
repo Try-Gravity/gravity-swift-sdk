@@ -16,12 +16,32 @@ private struct AdFrameKey: PreferenceKey {
 /// the clipping ancestors (e.g. a scroll view), which SwiftUI's global frame
 /// does not.
 private final class AdProbeView: UIView {
-    var onMoveToWindow: (() -> Void)?
+    var onRefresh: (() -> Void)?
+    var isPolling = true { didSet { updatePollTimer() } }
+    private var pollTimer: Timer?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        onMoveToWindow?()
+        updatePollTimer()
+        onRefresh?()
     }
+
+    // Ancestors can resize or clip without moving the ad, which SwiftUI
+    // reports nothing for, so sample while the ad is in a window and has not
+    // yet counted.
+    private func updatePollTimer() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+        if window != nil && isPolling {
+            let timer = Timer(timeInterval: Viewability.pollInterval, repeats: true) { [weak self] _ in
+                self?.onRefresh?()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            pollTimer = timer
+        }
+    }
+
+    deinit { pollTimer?.invalidate() }
 
     var visibleFraction: Double {
         guard let window else { return 0 }
@@ -41,7 +61,8 @@ private final class AdProbeBox {
 
 private struct AdProbe: UIViewRepresentable {
     let box: AdProbeBox
-    let onMoveToWindow: () -> Void
+    let isPolling: Bool
+    let onRefresh: () -> Void
 
     func makeUIView(context: Context) -> AdProbeView {
         let view = AdProbeView()
@@ -51,7 +72,8 @@ private struct AdProbe: UIViewRepresentable {
     }
 
     func updateUIView(_ view: AdProbeView, context: Context) {
-        view.onMoveToWindow = onMoveToWindow
+        view.onRefresh = onRefresh
+        view.isPolling = isPolling
     }
 }
 #endif
@@ -64,6 +86,7 @@ private struct ViewableImpressionModifier: ViewModifier {
     #if !os(watchOS)
     @State private var probe = AdProbeBox()
     #endif
+    @State private var isPolling = true
     @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
@@ -74,7 +97,7 @@ private struct ViewableImpressionModifier: ViewModifier {
                 }
             )
             #if !os(watchOS)
-            .background(AdProbe(box: probe, onMoveToWindow: refreshVisibleFraction))
+            .background(AdProbe(box: probe, isPolling: isPolling, onRefresh: refreshVisibleFraction))
             #endif
             .onPreferenceChange(AdFrameKey.self) { frame in
                 #if os(watchOS)
@@ -86,7 +109,11 @@ private struct ViewableImpressionModifier: ViewModifier {
                 #endif
             }
             .task(id: ad.impUrl) {
-                tracker.setAd(key: ad.impUrl) { [ad, gravity] in gravity.trackImpression(ad) }
+                isPolling = true
+                tracker.setAd(key: ad.impUrl) { [ad, gravity] in
+                    gravity.trackImpression(ad)
+                    isPolling = false
+                }
             }
             .task(id: scenePhase) { tracker.isActive = scenePhase == .active }
             .onAppear { tracker.isAttached = true }

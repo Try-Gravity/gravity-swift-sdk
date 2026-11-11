@@ -8,6 +8,7 @@ import CoreGraphics
 enum Viewability {
     static let minVisibleFraction = 0.5
     static let dwell: TimeInterval = 1.0
+    static let pollInterval: TimeInterval = 0.1
 }
 
 /// Decides when an ad counts as a viewable impression. Feed it the ad's
