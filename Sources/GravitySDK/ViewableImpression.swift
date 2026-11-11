@@ -49,10 +49,31 @@ private final class AdProbeView: UIView {
         var clips: [ViewClip] = []
         var ancestor: UIView? = self
         while let view = ancestor, view !== window {
-            if view.clipsToBounds { clips.append(.rect(view.convert(view.bounds, to: window))) }
+            if view.clipsToBounds {
+                let rect = view.convert(view.bounds, to: window)
+                let radius = view.layer.cornerRadius
+                if radius > 0 {
+                    let path = UIBezierPath(roundedRect: view.bounds, cornerRadius: radius)
+                    clips.append(.shape(bounds: rect) { path.contains(view.convert($0, from: window)) })
+                } else {
+                    clips.append(.rect(rect))
+                }
+            }
             if let mask = view.layer.mask {
                 let frame = mask.frame
-                clips.append(frame.isEmpty || frame.isInfinite ? .unmeasurable : .rect(view.convert(frame, to: window)))
+                if frame.isEmpty || frame.isInfinite {
+                    clips.append(.unmeasurable)
+                } else if let shape = mask as? CAShapeLayer, let path = shape.path {
+                    let rule: CGPathFillRule = shape.fillRule == .evenOdd ? .evenOdd : .winding
+                    clips.append(.shape(bounds: view.convert(frame, to: window)) {
+                        let point = view.convert($0, from: window)
+                        return path.contains(
+                            CGPoint(x: point.x - frame.minX, y: point.y - frame.minY), using: rule
+                        )
+                    })
+                } else {
+                    clips.append(.rect(view.convert(frame, to: window)))
+                }
             }
             ancestor = view.superview
         }

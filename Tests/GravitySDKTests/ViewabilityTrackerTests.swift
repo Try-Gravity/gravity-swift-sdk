@@ -139,6 +139,36 @@ final class ViewabilityTrackerTests: XCTestCase {
             ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [.rect(CGRect(x: 0, y: 200, width: 100, height: 100))]), 0)
     }
 
+    func testShapedClipUsesTheShapeNotItsBoundingBox() {
+        let viewport = CGRect(x: 0, y: 0, width: 400, height: 400)
+        let ad = CGRect(x: 0, y: 0, width: 200, height: 30)
+        let container = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let circle = ViewClip.shape(bounds: container) { point in
+            let dx = Double(point.x - 100), dy = Double(point.y - 100)
+            return dx * dx + dy * dy <= 100 * 100
+        }
+        let boundingBoxOnly = ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [.rect(container)])
+        XCTAssertEqual(boundingBoxOnly, 1, accuracy: 1e-9)
+
+        let fraction = ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [circle])
+        XCTAssertEqual(fraction, 0.49, accuracy: 0.05)
+        XCTAssertLessThan(fraction, Viewability.minVisibleFraction)
+
+        tracker.visibleFraction = fraction
+        clock.advance(ms: 5000)
+        XCTAssertEqual(fired, 0)
+    }
+
+    func testShapedClipThatCoversTheAdKeepsItViewable() {
+        let viewport = CGRect(x: 0, y: 0, width: 400, height: 400)
+        let ad = CGRect(x: 80, y: 80, width: 40, height: 40)
+        let circle = ViewClip.shape(bounds: CGRect(x: 0, y: 0, width: 200, height: 200)) { point in
+            let dx = Double(point.x - 100), dy = Double(point.y - 100)
+            return dx * dx + dy * dy <= 100 * 100
+        }
+        XCTAssertEqual(ViewabilityTracker.visibleFraction(of: ad, in: viewport, clippedBy: [circle]), 1, accuracy: 1e-9)
+    }
+
     func testUnmeasurableClipIsNotViewable() {
         let viewport = CGRect(x: 0, y: 0, width: 400, height: 400)
         let ad = CGRect(x: 0, y: 0, width: 100, height: 100)

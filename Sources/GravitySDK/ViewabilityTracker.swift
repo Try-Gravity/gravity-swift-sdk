@@ -9,12 +9,16 @@ enum Viewability {
     static let minVisibleFraction = 0.5
     static let dwell: TimeInterval = 1.0
     static let pollInterval: TimeInterval = 0.1
+    static let shapeSamplesPerAxis = 20
 }
 
-/// A region that clips an ad. A clip whose extent can't be read is
-/// `unmeasurable`, and an ad behind one is treated as not viewable.
-enum ViewClip: Equatable {
+/// A region that clips an ad. A `shape` is a non-rectangular clip (rounded
+/// rect, circle, path mask): `contains` takes a point in the same coordinate
+/// space as `bounds`. A clip whose extent can't be read is `unmeasurable`,
+/// and an ad behind one is treated as not viewable.
+enum ViewClip {
     case rect(CGRect)
+    case shape(bounds: CGRect, contains: (CGPoint) -> Bool)
     case unmeasurable
 }
 
@@ -62,15 +66,35 @@ final class ViewabilityTracker {
         let area = frame.width * frame.height
         guard area > 0 else { return 0 }
         var region = viewport
+        var shapes: [(CGPoint) -> Bool] = []
         for clip in clips {
             switch clip {
-            case .unmeasurable: return 0
-            case .rect(let rect): region = region.intersection(rect)
+            case .unmeasurable:
+                return 0
+            case .rect(let rect):
+                region = region.intersection(rect)
+            case .shape(let bounds, let contains):
+                region = region.intersection(bounds)
+                shapes.append(contains)
             }
         }
         let visible = frame.intersection(region)
-        guard !visible.isNull else { return 0 }
-        return Double((visible.width * visible.height) / area)
+        guard !visible.isNull, visible.width * visible.height > 0 else { return 0 }
+        let rectFraction = Double((visible.width * visible.height) / area)
+        guard !shapes.isEmpty else { return rectFraction }
+
+        let n = Viewability.shapeSamplesPerAxis
+        var inside = 0
+        for row in 0..<n {
+            for column in 0..<n {
+                let point = CGPoint(
+                    x: visible.minX + visible.width * (CGFloat(column) + 0.5) / CGFloat(n),
+                    y: visible.minY + visible.height * (CGFloat(row) + 0.5) / CGFloat(n)
+                )
+                if shapes.allSatisfy({ $0(point) }) { inside += 1 }
+            }
+        }
+        return rectFraction * Double(inside) / Double(n * n)
     }
 
     private func evaluate() {
