@@ -109,11 +109,11 @@ private struct ViewableImpressionModifier: ViewModifier {
                 #endif
             }
             .task(id: ad.impUrl) {
-                isPolling = true
                 tracker.setAd(key: ad.impUrl) { [ad, gravity] in
                     gravity.trackImpression(ad)
                     isPolling = false
                 }
+                isPolling = ad.impUrl != nil && !tracker.fired
             }
             .task(id: scenePhase) { tracker.isActive = scenePhase == .active }
             .onAppear { tracker.isAttached = true }

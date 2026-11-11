@@ -32,7 +32,7 @@ final class ViewabilityTracker {
     private let scheduler: Scheduler
     private var adKey: String?
     private var onViewable: (() -> Void)?
-    private var fired = false
+    private(set) var fired = false
     private var cancelTimer: (() -> Void)?
 
     init(scheduler: @escaping Scheduler = ViewabilityTracker.mainQueueScheduler) {
