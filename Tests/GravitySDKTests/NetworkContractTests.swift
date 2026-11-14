@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import XCTest
 @testable import GravitySDK
 
@@ -400,5 +403,61 @@ private actor AdResultBox {
 
     func load() -> AdResult? {
         result
+    }
+}
+
+final class ImpressionDedupeTests: XCTestCase {
+    func testTrackImpressionFiresOncePerImpressionURL() async throws {
+        let impUrl = "https://gravity-sdk.test/imp/\(UUID().uuidString)"
+        let other = "https://gravity-sdk.test/imp/\(UUID().uuidString)"
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RecordingURLProtocol.self]
+        RecordingURLProtocol.reset()
+        let gravity = Gravity(apiKey: "test", session: URLSession(configuration: configuration))
+
+        gravity.trackImpression(try makeAd(impUrl: impUrl))
+        gravity.trackImpression(try makeAd(impUrl: impUrl))
+        gravity.trackImpression(try makeAd(impUrl: impUrl))
+        try await waitForRequests(1)
+        XCTAssertEqual(RecordingURLProtocol.startCount, 1)
+
+        gravity.trackImpression(try makeAd(impUrl: other))
+        try await waitForRequests(2)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(RecordingURLProtocol.startCount, 2)
+    }
+
+    func testFiredImpressionLogIsBoundedAndEvictsOldest() {
+        let log = FiredImpressionLog(capacity: 2)
+
+        XCTAssertTrue(log.insert("a"))
+        XCTAssertFalse(log.insert("a"))
+        XCTAssertTrue(log.insert("b"))
+        XCTAssertTrue(log.insert("c"))
+        XCTAssertTrue(log.insert("a"))
+        XCTAssertFalse(log.insert("c"))
+    }
+
+    func testFiredImpressionLogIsThreadSafe() async {
+        let log = FiredImpressionLog(capacity: 10_000)
+        let accepted = await withTaskGroup(of: Int.self) { group in
+            for _ in 0..<8 {
+                group.addTask { (0..<500).filter { log.insert("key-\($0)") }.count }
+            }
+            return await group.reduce(0, +)
+        }
+
+        XCTAssertEqual(accepted, 500)
+    }
+
+    private func makeAd(impUrl: String) throws -> AdResponse {
+        let json = #"{"adText":"Ad","title":"Example","impUrl":"\#(impUrl)"}"#
+        return try JSONDecoder().decode(AdResponse.self, from: Data(json.utf8))
+    }
+
+    private func waitForRequests(_ count: Int) async throws {
+        for _ in 0..<100 where RecordingURLProtocol.startCount < count {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
     }
 }

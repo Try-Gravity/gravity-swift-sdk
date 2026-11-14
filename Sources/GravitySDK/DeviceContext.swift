@@ -7,6 +7,7 @@ import Foundation
 struct DeviceContext: Sendable {
     let ua: String
     let os: String
+    let osVersion: String
     let deviceModel: String
     let screenWidth: Int
     let screenHeight: Int
@@ -16,7 +17,9 @@ struct DeviceContext: Sendable {
 
     static func collect() -> DeviceContext {
         let ua = buildUserAgent()
-        let os = currentOS()
+        let os = osCategory()
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        let osVersion = "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
         let model = deviceModel()
         let (w, h) = screenSize()
         let tz = TimeZone.current.identifier
@@ -24,10 +27,15 @@ struct DeviceContext: Sendable {
 
         let type: String
         #if os(iOS)
-        switch UIDevice.current.userInterfaceIdiom {
-        case .phone: type = "mobile"
-        case .pad:   type = "tablet"
-        default:     type = "mobile"
+        if ProcessInfo.processInfo.isMacCatalystApp {
+            type = "desktop"
+        } else {
+            switch UIDevice.current.userInterfaceIdiom {
+            case .phone: type = "mobile"
+            case .pad:   type = "tablet"
+            case .mac:   type = "desktop"
+            default:     type = "mobile"
+            }
         }
         #elseif os(tvOS)
         type = "tv"
@@ -38,7 +46,7 @@ struct DeviceContext: Sendable {
         #endif
 
         return DeviceContext(
-            ua: ua, os: os, deviceModel: model,
+            ua: ua, os: os, osVersion: osVersion, deviceModel: model,
             screenWidth: w, screenHeight: h,
             timezone: tz, locale: locale, deviceType: type
         )
@@ -48,6 +56,7 @@ struct DeviceContext: Sendable {
         [
             "ua": ua,
             "os": os,
+            "os_version": osVersion,
             "device_model": deviceModel,
             "screen_width": screenWidth,
             "screen_height": screenHeight,
@@ -69,7 +78,8 @@ struct DeviceContext: Sendable {
     private static func currentOS() -> String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
         #if os(iOS)
-        return "iOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+        let name = ProcessInfo.processInfo.isMacCatalystApp ? "macOS" : "iOS"
+        return "\(name) \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
         #elseif os(macOS)
         return "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
         #elseif os(tvOS)
@@ -78,6 +88,16 @@ struct DeviceContext: Sendable {
         return "watchOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
         #else
         return "unknown"
+        #endif
+    }
+
+    private static func osCategory() -> String {
+        #if os(macOS)
+        return "macos"
+        #elseif os(iOS)
+        return ProcessInfo.processInfo.isMacCatalystApp ? "macos" : "ios"
+        #else
+        return "other"
         #endif
     }
 
