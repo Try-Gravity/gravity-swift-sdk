@@ -24,7 +24,7 @@ public enum SpecConstants {
     public static let allowedURLSchemes: Set<String> = ["http", "https", "mailto"]
     public static let nodeTypes: Set<String> = ["box", "text", "image", "link"]
     public static let bindableFields: Set<String> = [
-        "adText", "title", "cta", "brandName", "url", "favicon",
+        "adText", "title", "cta", "brandName", "url", "favicon", "brandImage",
     ]
     /// Semantic theme tokens usable as `$token[/alpha]` colors (PSP-1).
     public static let colorTokens: Set<String> = [
@@ -438,9 +438,9 @@ public struct SpecNode: Codable, Sendable {
     public let children: [SpecNode]?
 }
 
-/// A style value: string, number, or boolean. Unknown shapes decode as `nil`
-/// via `decodeIfPresent` failure at the container level being tolerated by
-/// the enum's throwing initializer only for the three known primitives.
+/// A style value: string, number, or boolean.
+/// Decoding preserves these primitive values; unsupported JSON value shapes
+/// decode as an empty string.
 public enum SpecStyleValue: Codable, Sendable, Equatable {
     case string(String)
     case number(Double)
@@ -668,6 +668,7 @@ public enum SpecBinding {
         case "brandName": return ad.brandName
         case "url": return ad.url
         case "favicon": return ad.favicon
+        case "brandImage": return ad.brandImage
         default: return nil
         }
     }
@@ -695,20 +696,23 @@ public enum SpecBinding {
         return url
     }
 
-    /// Literal image sources must be `https` on `*.trygravity.ai` — end-user
-    /// devices never fetch ad assets straight from third-party hosts.
+    /// Literal image sources must be `https` on `*.trygravity.ai` or
+    /// `*.trygravity.com` — end-user devices never fetch ad assets straight
+    /// from third-party hosts.
     public static func isAllowedImageSrc(_ src: String) -> Bool {
         isGravityHTTPS(src)
     }
 
-    /// `https` on `trygravity.ai` or a subdomain — the host policy shared by
-    /// literal image sources and literal link destinations.
+    private static let gravityHostDomains = ["trygravity.ai", "trygravity.com"]
+
+    /// `https` on `trygravity.ai` or `trygravity.com` or a subdomain — the
+    /// host policy shared by literal image sources and literal link destinations.
     public static func isGravityHTTPS(_ raw: String) -> Bool {
         guard let components = URLComponents(string: raw),
               components.scheme?.lowercased() == "https",
               let host = components.host?.lowercased()
         else { return false }
-        return host == "trygravity.ai" || host.hasSuffix(".trygravity.ai")
+        return gravityHostDomains.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
     /// Resolve a `text` node's content, expanding `{field}` placeholders.

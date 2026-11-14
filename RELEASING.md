@@ -1,5 +1,7 @@
 # Releasing `GravitySDK` (Swift Package)
 
+`VERSION` holds the SDK version. When a push to `main` changes it to a version that has no `v<VERSION>` tag on the public mirror, `sdk-release.yml` publishes that version; a version ending in `-unpublished` never ships. Source changes belong in this monorepo; do not edit the public mirror separately.
+
 Swift Package Manager has no central registry — Xcode installs packages directly from a git repo. Since this monorepo is private, releases are published by mirroring `sdk-ios/` into the **public** [`Try-Gravity/gravity-swift-sdk`](https://github.com/Try-Gravity/gravity-swift-sdk) repo via the [`publish-sdk-ios.yml`](../.github/workflows/publish-sdk-ios.yml) workflow. Only the SDK source is public; the monorepo stays private. (This mirror pattern is standard — Stripe, Firebase, etc. do the same.)
 
 Developers install with: Xcode → File → Add Package Dependencies → `https://github.com/Try-Gravity/gravity-swift-sdk`.
