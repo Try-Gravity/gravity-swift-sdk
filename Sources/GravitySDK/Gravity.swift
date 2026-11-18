@@ -36,15 +36,17 @@ public final class Gravity: Sendable {
     public let excludedTopics: [String]?
     public let readCMPConsent: Bool
     public let honorATT: Bool
+    public let enableFrames: Bool
 
     private let session: URLSession
+    private let openURL: @MainActor @Sendable (URL) async -> Bool
 
     /// - Parameters:
     ///   - apiKey: Your Gravity publisher API key. Falls back to the
     ///     `GRAVITY_API_KEY` environment variable.
     ///   - apiUrl: Gravity ad endpoint. Defaults to production.
     ///   - feedbackUrl: Gravity feedback endpoint. Defaults to production.
-    ///   - timeoutSeconds: Request timeout. Default 3 s.
+    ///   - timeoutSeconds: Request timeout. Default 4 s.
     ///   - production: `false` returns test ads (no billing). Default `false`.
     ///   - relevancy: Minimum relevancy threshold 0.0-1.0. Default `0.2`.
     ///   - excludedTopics: Topics to exclude from matching.
@@ -60,16 +62,19 @@ public final class Gravity: Sendable {
     ///     identifiers (denial, restriction, and never-asked all fail
     ///     closed, matching Apple's tracking policy). Set `false` only if
     ///     you forward the user's opt-out state yourself via `consent:`.
+    ///   - enableFrames: Allow rich frame ads on platforms with a frame renderer.
+    ///     Set `false` when using a custom renderer without frame support.
     public convenience init(
         apiKey: String? = nil,
         apiUrl: String = "https://server.trygravity.ai/api/v1/ad",
         feedbackUrl: String = "https://platform.trygravity.ai/ad-feedback",
-        timeoutSeconds: TimeInterval = 3.0,
+        timeoutSeconds: TimeInterval = 4.0,
         production: Bool = false,
         relevancy: Double = 0.2,
         excludedTopics: [String]? = nil,
         readCMPConsent: Bool = true,
-        honorATT: Bool = true
+        honorATT: Bool = true,
+        enableFrames: Bool = true
     ) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeoutSeconds
@@ -84,6 +89,7 @@ public final class Gravity: Sendable {
             excludedTopics: excludedTopics,
             readCMPConsent: readCMPConsent,
             honorATT: honorATT,
+            enableFrames: enableFrames,
             session: URLSession(configuration: config)
         )
     }
@@ -92,13 +98,15 @@ public final class Gravity: Sendable {
         apiKey: String? = nil,
         apiUrl: String = "https://server.trygravity.ai/api/v1/ad",
         feedbackUrl: String = "https://platform.trygravity.ai/ad-feedback",
-        timeoutSeconds: TimeInterval = 3.0,
+        timeoutSeconds: TimeInterval = 4.0,
         production: Bool = false,
         relevancy: Double = 0.2,
         excludedTopics: [String]? = nil,
         readCMPConsent: Bool = true,
         honorATT: Bool = true,
-        session: URLSession
+        enableFrames: Bool = true,
+        session: URLSession,
+        openURL: (@MainActor @Sendable (URL) async -> Bool)? = nil
     ) {
         self.apiKey = apiKey
             ?? ProcessInfo.processInfo.environment["GRAVITY_API_KEY"]
@@ -111,7 +119,9 @@ public final class Gravity: Sendable {
         self.excludedTopics = excludedTopics
         self.readCMPConsent = readCMPConsent
         self.honorATT = honorATT
+        self.enableFrames = enableFrames
         self.session = session
+        self.openURL = openURL ?? { await Gravity.openExternally($0) }
     }
 
     // MARK: - Fetch ads
@@ -131,12 +141,24 @@ public final class Gravity: Sendable {
     ///   - sessionId: Session identifier for frequency capping and experiments.
     ///   - userId: Stable per-user identifier. Pass `"anonymous"` if unknown.
     ///   - placements: Ad slots to fill (1-10).
-    ///   - userIP: End-user IP for geo targeting. Optional.
+    ///   - userIP: End-user IP, sent as `device.ip` for geo targeting. Optional.
     ///   - hashedIdentity: Pre-hashed email/phone from ``hashPII(email:phone:)``.
     ///   - extraUserFields: Additional user context (gender, age, etc.).
     ///   - extraDeviceFields: Additional device fields to merge (e.g. `["ifa": idfa]`).
     ///   - production: Override the instance-level production flag.
     ///   - relevancy: Override the instance-level relevancy threshold.
+    ///   - usage: Usage of the model response this ad request accompanies,
+    ///     for model cost in your Gravity dashboard. See ``ModelUsage``.
+    ///   - tags: Structured publisher cohort attributes, merged into `user.tags`.
+    ///     Existing string-valued `extraUserFields` remain supported.
+    ///   - units: Optional root-level unit selection.
+    ///   - enableFrames: Override the instance-level frame capability.
+    ///   - supportsPromptAction: Set `true` only when every opted-in placement
+    ///     has a working `onPrompt` callback that inserts into the composer
+    ///     without sending. The placement must also opt in to prompt actions.
+    ///   - alwaysReturn: Request a fallback test ad on no-fill. Ignored in production.
+    ///   - adLayout: Preview `image_left`, `image_right`, or `image_top` on test ads only.
+    ///   - testAdFormat: Preview `action` on test ads, subject to placement opt-in.
     public func getAds(
         messages: [Message],
         sessionId: String,
@@ -148,7 +170,15 @@ public final class Gravity: Sendable {
         extraDeviceFields: [String: Any]? = nil,
         production: Bool? = nil,
         relevancy: Double? = nil,
-        consent: ConsentSignal? = nil
+        consent: ConsentSignal? = nil,
+        usage: ModelUsage? = nil,
+        tags: [String: Any]? = nil,
+        units: [String]? = nil,
+        enableFrames: Bool? = nil,
+        supportsPromptAction: Bool = false,
+        alwaysReturn: Bool = false,
+        adLayout: String? = nil,
+        testAdFormat: String? = nil
     ) async -> AdResult {
         let start = Date()
         do {
@@ -163,7 +193,15 @@ public final class Gravity: Sendable {
                 extraDeviceFields: extraDeviceFields,
                 production: production,
                 relevancy: relevancy,
-                consent: consent
+                consent: consent,
+                usage: usage,
+                tags: tags,
+                units: units,
+                enableFrames: enableFrames,
+                supportsPromptAction: supportsPromptAction,
+                alwaysReturn: alwaysReturn,
+                adLayout: adLayout,
+                testAdFormat: testAdFormat
             )
             guard JSONSerialization.isValidJSONObject(body),
                   let data = try? JSONSerialization.data(withJSONObject: body)
@@ -245,9 +283,35 @@ public final class Gravity: Sendable {
     /// Fire the impression pixel. Call once when the ad becomes visible
     /// (at least 50% in viewport).
     ///
+    /// Each impression URL fires at most once per process, so a view that a
+    /// lazy list recreates cannot send the same impression again.
+    ///
     /// Fire-and-forget — errors are silently ignored.
     public func trackImpression(_ ad: AdResponse) {
         guard let urlString = ad.impUrl, let url = URL(string: urlString) else { return }
+        guard Self.firedImpressions.insert(urlString) else { return }
+        Task { _ = try? await session.data(from: url) }
+    }
+
+    /// Whether the billed impression pixel for `ad` has already been sent.
+    func hasFiredImpression(_ ad: AdResponse) -> Bool {
+        ad.impUrl.map { Self.firedImpressions.contains($0) } ?? false
+    }
+
+    /// Send `measured` once the billed pixel for `ad` has fired, so the two go
+    /// out together. Call only when the ad's visibility is measurable.
+    func sendMeasuredBeaconIfPixelFired(_ ad: AdResponse) {
+        guard hasFiredImpression(ad) else { return }
+        sendViewabilityBeacon(ad, event: .measured)
+    }
+
+    /// Send a shadow viewability beacon for `ad`. At most once per event and
+    /// impression URL per process. Fire-and-forget; never affects billing.
+    func sendViewabilityBeacon(_ ad: AdResponse, event: ViewabilityBeacon.Event) {
+        guard let impUrl = ad.impUrl,
+              let url = ViewabilityBeacon.url(impUrl: impUrl, event: event),
+              ViewabilityBeacon.sent.insert("\(event.rawValue)|\(impUrl)")
+        else { return }
         Task { _ = try? await session.data(from: url) }
     }
 
@@ -255,11 +319,55 @@ public final class Gravity: Sendable {
 
     /// Open the ad's tracked click URL. Routes through Gravity tracking,
     /// then 302-redirects to the landing page.
+    ///
+    /// When the ad carries an app deeplink, the click is recorded first and
+    /// the advertiser's app opens directly, falling back to the website.
     @MainActor
     public func handleClick(_ ad: AdResponse) {
         guard let urlString = ad.clickUrl, let url = URL(string: urlString) else { return }
         #if canImport(UIKit) && !os(watchOS)
+        if handleDeeplinkClick(ad, url: url) { return }
         UIApplication.shared.open(url)
+        #endif
+    }
+
+    /// Start the deeplink click flow when `url` is the tracked `clickUrl` of
+    /// an ad marked `hasDeeplink`. Returns `false`, doing nothing, for every
+    /// other click so the caller keeps its existing behavior.
+    @MainActor
+    func handleDeeplinkClick(_ ad: AdResponse, url: URL) -> Bool {
+        guard ad.hasDeeplink == true, url.absoluteString == ad.clickUrl else { return false }
+        Task { @MainActor in await resolveDeeplinkClick(url) }
+        return true
+    }
+
+    /// Record the click through the resolve call, then open the deeplink, its
+    /// fallback, or the tracked `clickUrl` according to the server's answer.
+    @MainActor
+    func resolveDeeplinkClick(_ clickUrl: URL) async {
+        switch await DeeplinkClick.resolve(clickUrl, session: session) {
+        case .blocked:
+            return
+        case .clickUrl:
+            _ = await openURL(clickUrl)
+        case .fallback(let fallback):
+            _ = await openURL(fallback)
+        case .deeplink(let deeplink, let fallback):
+            if !(await openURL(deeplink)) { _ = await openURL(fallback) }
+        }
+    }
+
+    /// Opens without `canOpenURL`, which needs the scheme in the host app's
+    /// `LSApplicationQueriesSchemes`; the completion reports whether an app
+    /// handled the URL.
+    @MainActor
+    private static func openExternally(_ url: URL) async -> Bool {
+        #if canImport(UIKit) && !os(watchOS)
+        return await withCheckedContinuation { continuation in
+            UIApplication.shared.open(url, options: [:]) { continuation.resume(returning: $0) }
+        }
+        #else
+        return false
         #endif
     }
 
@@ -316,6 +424,8 @@ public final class Gravity: Sendable {
 
     // MARK: - Private
 
+    private static let firedImpressions = FiredImpressionLog(capacity: 1000)
+
     private func httpError(statusCode: Int, body: Data) -> String {
         guard let text = String(data: body, encoding: .utf8) else {
             return "HTTP \(statusCode)"
@@ -344,7 +454,15 @@ public final class Gravity: Sendable {
         extraDeviceFields: [String: Any]?,
         production: Bool?,
         relevancy: Double?,
-        consent: ConsentSignal? = nil
+        consent: ConsentSignal? = nil,
+        usage: ModelUsage? = nil,
+        tags: [String: Any]? = nil,
+        units: [String]? = nil,
+        enableFrames: Bool? = nil,
+        supportsPromptAction: Bool = false,
+        alwaysReturn: Bool = false,
+        adLayout: String? = nil,
+        testAdFormat: String? = nil
     ) -> [String: Any] {
         // Last 2 valid conversational messages
         let validMessages = messages
@@ -353,14 +471,14 @@ public final class Gravity: Sendable {
             .map { $0 as Any }
 
         var user: [String: Any] = ["id": userId]
-        if let ip = userIP { user["ip"] = ip }
         if let hashed = hashedIdentity {
-            if let eh = hashed.emailHash { user["email_hash"] = eh }
+            if let eh = hashed.emailHash { user["hashed_email"] = eh }
             if let ph = hashed.hashedPhone { user["hashed_phone"] = ph }
         }
         if let extra = extraUserFields {
             for (k, v) in extra { user[k] = v }
         }
+        if let tags { user["tags"] = tags }
 
         var device = DeviceContext.collect().toDict()
         if let ip = userIP { device["ip"] = ip }
@@ -369,14 +487,26 @@ public final class Gravity: Sendable {
         }
 
         var body: [String: Any] = [
+            "sdk": ["name": "gravity-ios", "version": ViewabilityBeacon.sdkVersion],
             "messages": Array(validMessages),
             "sessionId": sessionId,
-            "placements": placements.map { $0.toDict() },
+            "placements": placements.map { $0.toDict(supportsPromptAction: supportsPromptAction) },
             "user": user,
             "device": device,
             "relevancy": relevancy ?? self.relevancy,
             "testAd": !(production ?? self.production),
         ]
+        if let units { body["units"] = units }
+        if !(production ?? self.production) {
+            if alwaysReturn { body["alwaysReturn"] = true }
+            if let adLayout, ["image_left", "image_right", "image_top"].contains(adLayout) {
+                body["adLayout"] = adLayout
+            }
+            if testAdFormat == "action" { body["testAdFormat"] = "action" }
+        }
+        #if canImport(WebKit) && canImport(SwiftUI) && canImport(UIKit) && os(iOS)
+        if enableFrames ?? self.enableFrames { body["supportsFrames"] = true }
+        #endif
         // Capability profile only — never the legacy `supportsSpec: true`,
         // which the engine reads as "full web renderer" (web1) and would
         // attach full-CSS specs this interpreter can't paint. The engine's
@@ -384,7 +514,7 @@ public final class Gravity: Sendable {
         // Advertised only on platforms where the interpreter (SpecAdView)
         // actually compiles — tvOS/watchOS builds have no PSP-1 renderer,
         // so they must not ask for spec payloads they always discard.
-        #if canImport(SwiftUI) && canImport(UIKit) && !os(tvOS) && !os(watchOS)
+        #if canImport(SwiftUI) && canImport(UIKit) && os(iOS)
         body["specCapabilities"] = "psp1"
         #endif
         if let topics = excludedTopics {
@@ -404,6 +534,47 @@ public final class Gravity: Sendable {
             let dict = signal.toDict()
             if !dict.isEmpty { body["consent"] = dict }
         }
+        if let usage {
+            let dict = usage.toDict()
+            if !dict.isEmpty { body["usage"] = dict }
+        }
         return body
+    }
+}
+
+/// Bounded, thread-safe record of impression URLs already fired. The oldest
+/// entry is evicted when the record is full.
+internal final class FiredImpressionLog: @unchecked Sendable {
+    private let capacity: Int
+    private let lock = NSLock()
+    private var fired: Set<String> = []
+    private var order: [String] = []
+    private var head = 0
+
+    init(capacity: Int) {
+        self.capacity = max(1, capacity)
+    }
+
+    func contains(_ key: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return fired.contains(key)
+    }
+
+    /// Returns `true` when `key` is new, and `false` when it was already recorded.
+    func insert(_ key: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard fired.insert(key).inserted else { return false }
+        order.append(key)
+        if fired.count > capacity {
+            fired.remove(order[head])
+            head += 1
+            if head >= capacity {
+                order.removeFirst(head)
+                head = 0
+            }
+        }
+        return true
     }
 }

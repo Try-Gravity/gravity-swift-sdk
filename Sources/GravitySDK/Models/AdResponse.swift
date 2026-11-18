@@ -11,7 +11,13 @@ public struct AdResponse: Codable, Sendable, Identifiable {
     public let cta: String?
     public let url: String?
     public let favicon: String?
+    public let brandImage: String?
+    public let render: [String: AnyCodable]?
+    public let action: [String: AnyCodable]?
     public let clickUrl: String?
+    /// `true` when the buyer sent an app deeplink for this click. The SDK
+    /// then records the click and opens the app, falling back to the website.
+    public let hasDeeplink: Bool?
     public let impUrl: String?
     public let placement: String?
     public let placementId: String?
@@ -31,9 +37,17 @@ public struct AdResponse: Codable, Sendable, Identifiable {
     // Server-rendered spec
     public let rendererSpec: [String: AnyCodable]?
 
+    public var promptAction: PromptAction? {
+        guard let action,
+              let data = try? JSONEncoder().encode(action),
+              let promptAction = try? JSONDecoder().decode(PromptAction.self, from: data),
+              promptAction.usable else { return nil }
+        return promptAction
+    }
+
     enum CodingKeys: String, CodingKey {
-        case adText, title, brandName, cta, url, favicon
-        case clickUrl, impUrl, placement
+        case adText, title, brandName, cta, url, favicon, brandImage, render, action
+        case clickUrl, hasDeeplink, impUrl, placement
         case placementId = "placement_id"
         case campaignId
         case variant
@@ -54,7 +68,11 @@ public struct AdResponse: Codable, Sendable, Identifiable {
         cta = try c.decodeIfPresent(String.self, forKey: .cta)
         url = try c.decodeIfPresent(String.self, forKey: .url)
         favicon = try c.decodeIfPresent(String.self, forKey: .favicon)
+        brandImage = try? c.decodeIfPresent(String.self, forKey: .brandImage)
+        render = try? c.decodeIfPresent([String: AnyCodable].self, forKey: .render)
+        action = try? c.decodeIfPresent([String: AnyCodable].self, forKey: .action)
         clickUrl = try c.decodeIfPresent(String.self, forKey: .clickUrl)
+        hasDeeplink = try? c.decodeIfPresent(Bool.self, forKey: .hasDeeplink)
         impUrl = try c.decodeIfPresent(String.self, forKey: .impUrl)
         placement = try c.decodeIfPresent(String.self, forKey: .placement)
         placementId = try c.decodeIfPresent(String.self, forKey: .placementId)
@@ -66,7 +84,14 @@ public struct AdResponse: Codable, Sendable, Identifiable {
         compositionMode = try c.decodeIfPresent(String.self, forKey: .compositionMode)
         composition = try c.decodeIfPresent([String: AnyCodable].self, forKey: .composition)
         leadForm = try c.decodeIfPresent(LeadFormConfig.self, forKey: .leadForm)
-        rendererSpec = try c.decodeIfPresent([String: AnyCodable].self, forKey: .rendererSpec)
+        if let spec = try? c.decode([String: AnyCodable].self, forKey: .rendererSpec) {
+            rendererSpec = spec
+        } else if let spec = try? c.decode(String.self, forKey: .rendererSpec),
+                  let data = spec.data(using: .utf8) {
+            rendererSpec = try? JSONDecoder().decode([String: AnyCodable].self, from: data)
+        } else {
+            rendererSpec = nil
+        }
         id = impUrl ?? UUID().uuidString
     }
 
@@ -78,7 +103,11 @@ public struct AdResponse: Codable, Sendable, Identifiable {
         try c.encodeIfPresent(cta, forKey: .cta)
         try c.encodeIfPresent(url, forKey: .url)
         try c.encodeIfPresent(favicon, forKey: .favicon)
+        try c.encodeIfPresent(brandImage, forKey: .brandImage)
+        try c.encodeIfPresent(render, forKey: .render)
+        try c.encodeIfPresent(action, forKey: .action)
         try c.encodeIfPresent(clickUrl, forKey: .clickUrl)
+        try c.encodeIfPresent(hasDeeplink, forKey: .hasDeeplink)
         try c.encodeIfPresent(impUrl, forKey: .impUrl)
         try c.encodeIfPresent(placement, forKey: .placement)
         try c.encodeIfPresent(placementId, forKey: .placementId)
