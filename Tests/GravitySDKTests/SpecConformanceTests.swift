@@ -461,6 +461,33 @@ final class SpecConformanceTests: XCTestCase {
         XCTAssertNil(SpecBinding.imageURL(insecure, ad: noFavicon))
     }
 
+    func testAllowedImageHosts() {
+        let accepted = [
+            "https://trygravity.ai/x.png",
+            "https://cdn.trygravity.ai/x.png",
+            "https://trygravity.com/x.png",
+            "https://cdn.trygravity.com/x.png",
+            "https://a.b.trygravity.com/x.png",
+            "https://CDN.TryGravity.COM/x.png",
+        ]
+        let rejected = [
+            "http://cdn.trygravity.com/x.png",
+            "https://eviltrygravity.com/x.png",
+            "https://eviltrygravity.ai/x.png",
+            "https://trygravity.com.evil.com/x.png",
+            "https://trygravity.co/x.png",
+            "https://trygravity.com@evil.com/x.png",
+            "https://evil.com/?h=cdn.trygravity.com",
+        ]
+
+        for src in accepted {
+            XCTAssertTrue(SpecBinding.isAllowedImageSrc(src), src)
+        }
+        for src in rejected {
+            XCTAssertFalse(SpecBinding.isAllowedImageSrc(src), src)
+        }
+    }
+
     /// The disclosure verdict is memoized with the renderable spec so the
     /// SwiftUI render path never re-walks the tree per frame.
     func testDisclosureVerdictMemoized() throws {
@@ -725,6 +752,15 @@ final class SpecConformanceTests: XCTestCase {
             "https://docs.trygravity.ai/help"
         )
 
+        let gravityComHosted = SpecNode(
+            type: "link", bind: nil, showIf: nil, text: nil,
+            src: nil, href: "https://docs.trygravity.com/help", style: nil, children: nil
+        )
+        XCTAssertEqual(
+            SpecBinding.explicitHref(gravityComHosted)?.absoluteString,
+            "https://docs.trygravity.com/help"
+        )
+
         // A literal href on a third-party host must not open directly —
         // the tap routes through the tracked clickUrl instead.
         let foreign = SpecNode(
@@ -774,5 +810,28 @@ final class SpecConformanceTests: XCTestCase {
     static func decodeAd(_ dict: [String: Any]) throws -> AdResponse {
         let data = try JSONSerialization.data(withJSONObject: dict)
         return try JSONDecoder().decode(AdResponse.self, from: data)
+    }
+
+    /// The engine's web1 image-layout specs (engine render_mode.py) and the
+    /// `render` / `brandImage` response fields must decode cleanly and fall
+    /// back to the built-in view on iOS (PSP-1 has no `brandImage` binding).
+    func testEngineImageLayoutSpecsFallBackSafely() throws {
+        let specs: [String: String] = [
+            "image_left": ##"{"version":1,"name":"image_left","root":{"type":"link","bind":"url","style":{"display":"flex","overflow":"hidden","background":"hsl(var(--card))","border":"1px solid hsl(var(--border))","borderRadius":"var(--radius, 0.625rem)","textDecoration":"none","color":"inherit","flexDirection":"row"},"children":[{"type":"box","showIf":"brandImage","style":{"display":"flex","flexShrink":0,"overflow":"hidden","background":"#ffffff","width":"28%","maxWidth":"140px","minHeight":"112px","alignSelf":"stretch","borderRight":"1px solid hsl(var(--border))"},"children":[{"type":"image","bind":"brandImage","showIf":"brandImage","style":{"objectFit":"contain","display":"block","width":"100%","height":"100%"}}]},{"type":"box","style":{"display":"flex","flexDirection":"column","gap":"6px","padding":"12px 14px","flex":"1 1 0","minWidth":"0","justifyContent":"center"},"children":[{"type":"box","style":{"display":"flex","alignItems":"center","gap":"6px"},"children":[{"type":"image","bind":"favicon","showIf":"favicon","style":{"width":"16px","height":"16px","borderRadius":"4px","objectFit":"contain","flexShrink":0}},{"type":"text","bind":"brandName","showIf":"brandName","style":{"fontSize":"12px","fontWeight":600,"color":"hsl(var(--card-foreground))"}},{"type":"text","text":"Sponsored","style":{"fontSize":"11px","color":"hsl(var(--muted-foreground))"}}]},{"type":"text","bind":"title","showIf":"title","style":{"fontSize":"15px","fontWeight":600,"lineHeight":"1.35","color":"hsl(var(--card-foreground))"}},{"type":"text","bind":"adText","showIf":"adText","style":{"fontSize":"13px","lineHeight":"1.5","color":"hsl(var(--muted-foreground))"}},{"type":"box","style":{"display":"flex","marginTop":"4px"},"children":[{"type":"text","bind":"cta","showIf":"cta","style":{"padding":"8px 16px","fontSize":"13px","fontWeight":600,"lineHeight":"1","whiteSpace":"nowrap","color":"hsl(var(--primary-foreground))","background":"hsl(var(--primary))","borderRadius":"7px"}}]}]}]}}"##,
+            "image_right": ##"{"version":1,"name":"image_right","root":{"type":"link","bind":"url","style":{"display":"flex","overflow":"hidden","background":"hsl(var(--card))","border":"1px solid hsl(var(--border))","borderRadius":"var(--radius, 0.625rem)","textDecoration":"none","color":"inherit","flexDirection":"row"},"children":[{"type":"box","style":{"display":"flex","flexDirection":"column","gap":"6px","padding":"12px 14px","flex":"1 1 0","minWidth":"0","justifyContent":"center"},"children":[{"type":"box","style":{"display":"flex","alignItems":"center","gap":"6px"},"children":[{"type":"image","bind":"favicon","showIf":"favicon","style":{"width":"16px","height":"16px","borderRadius":"4px","objectFit":"contain","flexShrink":0}},{"type":"text","bind":"brandName","showIf":"brandName","style":{"fontSize":"12px","fontWeight":600,"color":"hsl(var(--card-foreground))"}},{"type":"text","text":"Sponsored","style":{"fontSize":"11px","color":"hsl(var(--muted-foreground))"}}]},{"type":"text","bind":"title","showIf":"title","style":{"fontSize":"15px","fontWeight":600,"lineHeight":"1.35","color":"hsl(var(--card-foreground))"}},{"type":"text","bind":"adText","showIf":"adText","style":{"fontSize":"13px","lineHeight":"1.5","color":"hsl(var(--muted-foreground))"}},{"type":"box","style":{"display":"flex","marginTop":"4px"},"children":[{"type":"text","bind":"cta","showIf":"cta","style":{"padding":"8px 16px","fontSize":"13px","fontWeight":600,"lineHeight":"1","whiteSpace":"nowrap","color":"hsl(var(--primary-foreground))","background":"hsl(var(--primary))","borderRadius":"7px"}}]}]},{"type":"box","showIf":"brandImage","style":{"display":"flex","flexShrink":0,"overflow":"hidden","background":"#ffffff","width":"28%","maxWidth":"140px","minHeight":"112px","alignSelf":"stretch","borderLeft":"1px solid hsl(var(--border))"},"children":[{"type":"image","bind":"brandImage","showIf":"brandImage","style":{"objectFit":"contain","display":"block","width":"100%","height":"100%"}}]}]}}"##,
+            "image_top": ##"{"version":1,"name":"image_top","root":{"type":"link","bind":"url","style":{"display":"flex","overflow":"hidden","background":"hsl(var(--card))","border":"1px solid hsl(var(--border))","borderRadius":"var(--radius, 0.625rem)","textDecoration":"none","color":"inherit","flexDirection":"column","maxWidth":"320px"},"children":[{"type":"box","showIf":"brandImage","style":{"display":"flex","flexShrink":0,"overflow":"hidden","background":"#ffffff","height":"160px","borderBottom":"1px solid hsl(var(--border))"},"children":[{"type":"image","bind":"brandImage","showIf":"brandImage","style":{"objectFit":"contain","display":"block","width":"100%","height":"100%"}}]},{"type":"box","style":{"display":"flex","flexDirection":"column","gap":"6px","padding":"12px 14px","flex":"1 1 0","minWidth":"0"},"children":[{"type":"box","style":{"display":"flex","alignItems":"center","gap":"6px"},"children":[{"type":"image","bind":"favicon","showIf":"favicon","style":{"width":"16px","height":"16px","borderRadius":"4px","objectFit":"contain","flexShrink":0}},{"type":"text","bind":"brandName","showIf":"brandName","style":{"fontSize":"12px","fontWeight":600,"color":"hsl(var(--card-foreground))"}},{"type":"text","text":"Sponsored","style":{"fontSize":"11px","color":"hsl(var(--muted-foreground))"}}]},{"type":"text","bind":"title","showIf":"title","style":{"fontSize":"15px","fontWeight":600,"lineHeight":"1.35","color":"hsl(var(--card-foreground))"}},{"type":"text","bind":"adText","showIf":"adText","style":{"fontSize":"13px","lineHeight":"1.5","color":"hsl(var(--muted-foreground))"}},{"type":"box","style":{"display":"flex","marginTop":"4px"},"children":[{"type":"text","bind":"cta","showIf":"cta","style":{"padding":"8px 16px","fontSize":"13px","fontWeight":600,"lineHeight":"1","whiteSpace":"nowrap","color":"hsl(var(--primary-foreground))","background":"hsl(var(--primary))","borderRadius":"7px"}}]}]}]}}"##,
+        ]
+        for (layout, spec) in specs {
+            let json = """
+            {"adText": "copy here", "title": "Monetize your AI app",
+             "brandImage": "https://trygravity.ai/og-image.png",
+             "impUrl": "https://t.example/i?k=\(layout)-\(UUID().uuidString)",
+             "render": {"mode": "spec", "layout": "\(layout)"},
+             "renderer_spec": \(spec)}
+            """
+            let ad = try JSONDecoder().decode(AdResponse.self, from: Data(json.utf8))
+            XCTAssertEqual(ad.adText, "copy here", "\(layout): ad must still decode")
+            XCTAssertNil(RendererSpec.renderableSpec(for: ad), "\(layout): must fall back")
+        }
     }
 }

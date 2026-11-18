@@ -1,6 +1,6 @@
 // Spec rendering depends on GravityTheme's semantic palette, which is
 // unavailable on tvOS/watchOS; those platforms keep the built-in ad view.
-#if canImport(SwiftUI) && canImport(UIKit) && !os(tvOS) && !os(watchOS)
+#if canImport(SwiftUI) && canImport(UIKit) && os(iOS)
 import SwiftUI
 import UIKit
 
@@ -20,6 +20,7 @@ import UIKit
 /// ```swift
 /// SpecAdView(ad: ad, gravity: gravity, sessionId: sessionId)
 /// ```
+@MainActor
 public struct SpecAdView: View {
     private let ad: AdResponse
     private let gravity: Gravity
@@ -29,7 +30,6 @@ public struct SpecAdView: View {
     private let spec: RendererSpec?
     private let specHasDisclosure: Bool
 
-    @State private var impressionFired = false
     @State private var feedbackSent = false
 
     public init(
@@ -117,15 +117,12 @@ public struct SpecAdView: View {
                     }
                 }
             }
-            .onAppear {
-                guard !impressionFired else { return }
-                impressionFired = true
-                gravity.trackImpression(ad)
-            }
+            .background(NativeImpressionProbe(ad: ad, gravity: gravity).allowsHitTesting(false))
+            .trackViewability(of: ad, gravity: gravity)
         } else {
             // GravityAdView fires its own impression pixel on appear and
             // owns the feedback chrome on the fallback path.
-            GravityAdView(ad: ad, gravity: gravity, sessionId: sessionId, showFeedback: showFeedback)
+            GravityAdView(ad: ad, gravity: gravity, sessionId: sessionId, showFeedback: showFeedback, enableFrames: false)
         }
     }
 }
