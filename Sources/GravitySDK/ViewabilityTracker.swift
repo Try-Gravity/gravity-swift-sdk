@@ -118,3 +118,46 @@ final class ViewabilityTracker {
         }
     }
 }
+
+final class ViewabilityObservation {
+    let tracker: ViewabilityTracker
+    private var measuredKey: String?
+    private var ad: AdResponse?
+    private var gravity: Gravity?
+
+    init(tracker: ViewabilityTracker = ViewabilityTracker()) {
+        self.tracker = tracker
+    }
+
+    func setAd(_ ad: AdResponse, gravity: Gravity) {
+        self.ad = ad
+        self.gravity = gravity
+        tracker.setAd(key: ad.impUrl) { [weak self] in
+            self?.sendMeasuredIfPixelFired()
+            gravity.sendViewabilityBeacon(ad, event: .viewable)
+        }
+    }
+
+    private func sendMeasuredIfPixelFired() {
+        guard let ad, let gravity, measuredKey != ad.impUrl, gravity.hasFiredImpression(ad) else { return }
+        measuredKey = ad.impUrl
+        gravity.sendMeasuredBeaconIfPixelFired(ad)
+    }
+
+    var isPolling: Bool {
+        ad?.impUrl != nil && !(tracker.fired && measuredKey == ad?.impUrl)
+    }
+
+    func refresh(measurement: () -> (fraction: Double, isMeasurable: Bool)?) -> Bool {
+        guard let ad, let gravity else { return false }
+        if tracker.fired {
+            guard gravity.hasFiredImpression(ad) else { return true }
+            if measurement()?.isMeasurable == true { sendMeasuredIfPixelFired() }
+            return false
+        }
+        let value = measurement()
+        tracker.visibleFraction = value?.fraction ?? 0
+        if value?.isMeasurable == true { sendMeasuredIfPixelFired() }
+        return isPolling
+    }
+}

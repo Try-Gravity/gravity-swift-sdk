@@ -13,10 +13,12 @@ private final class WeakFrameHandler: NSObject, WKScriptMessageHandler {
 
 /// An isolated GFB-1 frame surface for UIKit. It falls back to the native PSP-1/card renderer.
 @MainActor
-public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate {
+public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate, UIGestureRecognizerDelegate {
     public var onHeightChange: ((CGFloat) -> Void)?
     public var onActionResult: ((String, PromptInsertionResult) -> Void)?
     private var webView: WKWebView?
+    private var lastNativeTap: TimeInterval?
+    var clickClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var fallback: UIHostingController<AnyView>?
     private var ad: AdResponse?
     private var gravity: Gravity?
@@ -30,6 +32,8 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
     private var sourcePinned = false
     private var timeout: Timer?
     private var visibilityTimer: Timer?
+    private var viewabilityProbe: AdProbeView?
+    private var viewability = ViewabilityObservation()
     private var notifications: [NSObjectProtocol] = []
     private var telemetry: FrameTelemetry?
     private let execution = PromptExecution()
@@ -103,6 +107,11 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
         let web = WKWebView(frame: bounds, configuration: configuration)
         web.navigationDelegate = self
         web.uiDelegate = self
+        let tap = UITapGestureRecognizer(target: self, action: #selector(recordNativeTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesEnded = false
+        tap.delegate = self
+        web.addGestureRecognizer(tap)
         web.isOpaque = false
         web.backgroundColor = .clear
         web.scrollView.isScrollEnabled = false
@@ -112,12 +121,25 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
         webView = web
         addSubview(web)
         telemetry = FrameTelemetry(frameURL: selection.url, impURL: ad.impUrl, frameEventSource: selection.eventSource)
+        viewability = ViewabilityObservation()
+        viewability.setAd(ad, gravity: gravity)
+        let probe = AdProbeView(frame: bounds)
+        probe.isOpaque = false
+        probe.backgroundColor = .clear
+        probe.isUserInteractionEnabled = false
+        probe.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        probe.onRefresh = { [weak self] in self?.measureShadowViewability() }
+        viewabilityProbe = probe
+        insertSubview(probe, belowSubview: web)
         visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.measureVisibility() }
         }
         for name in [UIApplication.didEnterBackgroundNotification, UIApplication.willEnterForegroundNotification] {
             notifications.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.measureVisibility() }
+                Task { @MainActor in
+                    self?.measureVisibility()
+                    self?.measureShadowViewability()
+                }
             })
         }
         setNeedsLayout()
@@ -199,6 +221,12 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
         if isVisible, let ad { gravity?.trackImpression(ad) }
     }
 
+    private func measureShadowViewability() {
+        viewability.tracker.isAttached = window != nil
+        viewability.tracker.isActive = UIApplication.shared.applicationState == .active
+        viewabilityProbe?.isPolling = viewability.refresh { self.viewabilityProbe?.measurement }
+    }
+
     fileprivate func receive(_ message: WKScriptMessage) {
         guard !failed, message.frameInfo.isMainFrame, message.webView === webView,
               let text = message.body as? String, text.utf8.count <= 16000,
@@ -220,8 +248,8 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
         } else if type == "click" {
             guard value["action"] == nil || value["action"] is NSNull || value["action"] is String, let ad else { return }
             let action = value["action"] as? String
+            guard FrameShell.allowsClick(body, action: action, lastNativeTap: lastNativeTap, now: clickClock()) else { return }
             if action == "prompt", ad.promptAction != nil, onPrompt != nil {
-                guard body["activated"] as? Bool == true else { return }
                 let current = generation
                 execution.activate(ad: ad, handler: onPrompt, frame: true, open: { [weak self] in self?.open($0) ?? false }) { [weak self] status, opened in
                     guard let self, self.generation == current else { return }
@@ -235,6 +263,16 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
         } else if type == "event", let name = value["name"] as? String {
             telemetry?.push(name, data: value["data"])
         }
+    }
+
+    @objc private func recordNativeTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended else { return }
+        lastNativeTap = clickClock()
+    }
+
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                                  shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
     }
 
     private func open(_ url: URL) -> Bool {
@@ -330,6 +368,11 @@ public final class GravityFrameView: UIView, WKNavigationDelegate, WKUIDelegate 
     }
 
     private func stopFrame() {
+        lastNativeTap = nil
+        viewability.tracker.isAttached = false
+        viewabilityProbe?.onRefresh = nil
+        viewabilityProbe?.removeFromSuperview()
+        viewabilityProbe = nil
         generation = UUID().uuidString
         execution.invalidate()
         timeout?.invalidate(); timeout = nil

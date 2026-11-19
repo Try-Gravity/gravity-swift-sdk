@@ -13,7 +13,7 @@ private struct AdFrameKey: PreferenceKey {
 /// how SwiftUI's `.clipped()`/`.clipShape` reach a hosted platform view),
 /// which SwiftUI's global frame does not. A clip it can't measure makes the
 /// ad count as not viewable.
-private final class AdProbeView: UIView {
+final class AdProbeView: UIView {
     var onRefresh: (() -> Void)?
     var isPolling = true { didSet { updatePollTimer() } }
     private var pollTimer: Timer?
@@ -93,7 +93,6 @@ private final class AdProbeView: UIView {
 
 private final class AdProbeBox {
     weak var view: AdProbeView?
-    var measuredKey: String?
 }
 
 private struct AdProbe: UIViewRepresentable {
@@ -118,7 +117,7 @@ private struct ViewabilityModifier: ViewModifier {
     let ad: AdResponse
     let gravity: Gravity
 
-    @State private var tracker = ViewabilityTracker()
+    @State private var observation = ViewabilityObservation()
     @State private var probe = AdProbeBox()
     @State private var isPolling = true
     @Environment(\.scenePhase) private var scenePhase
@@ -133,22 +132,12 @@ private struct ViewabilityModifier: ViewModifier {
             .background(AdProbe(box: probe, isPolling: isPolling, onRefresh: refreshVisibleFraction))
             .onPreferenceChange(AdFrameKey.self) { _ in refreshVisibleFraction() }
             .task(id: ad.impUrl) {
-                tracker.setAd(key: ad.impUrl) { [ad, gravity] in
-                    sendMeasuredIfPixelFired()
-                    gravity.sendViewabilityBeacon(ad, event: .viewable)
-                }
-                isPolling = ad.impUrl != nil && !(tracker.fired && probe.measuredKey == ad.impUrl)
+                observation.setAd(ad, gravity: gravity)
+                isPolling = observation.isPolling
             }
-            .task(id: scenePhase) { tracker.isActive = scenePhase == .active }
-            .onAppear { tracker.isAttached = true }
-            .onDisappear { tracker.isAttached = false }
-    }
-
-    // Once per ad per view, independent of the process-wide log, which evicts.
-    private func sendMeasuredIfPixelFired() {
-        guard probe.measuredKey != ad.impUrl, gravity.hasFiredImpression(ad) else { return }
-        probe.measuredKey = ad.impUrl
-        gravity.sendMeasuredBeaconIfPixelFired(ad)
+            .task(id: scenePhase) { observation.tracker.isActive = scenePhase == .active }
+            .onAppear { observation.tracker.isAttached = true }
+            .onDisappear { observation.tracker.isAttached = false }
     }
 
     // Keep sampling after `viewable` until `measured` has gone out, since the
@@ -158,15 +147,7 @@ private struct ViewabilityModifier: ViewModifier {
     // a clip that becomes measurable later is picked up by the next preference
     // change or window move.
     private func refreshVisibleFraction() {
-        if tracker.fired {
-            guard gravity.hasFiredImpression(ad) else { return }
-            if probe.view?.measurement.isMeasurable == true { sendMeasuredIfPixelFired() }
-            isPolling = false
-            return
-        }
-        let measurement = probe.view?.measurement
-        tracker.visibleFraction = measurement?.fraction ?? 0
-        if measurement?.isMeasurable == true { sendMeasuredIfPixelFired() }
+        isPolling = observation.refresh { probe.view?.measurement }
     }
 }
 
