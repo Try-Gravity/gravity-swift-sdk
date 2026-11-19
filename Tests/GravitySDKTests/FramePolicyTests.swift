@@ -2,6 +2,21 @@ import XCTest
 @testable import GravitySDK
 
 final class FramePolicyTests: XCTestCase {
+    func testFrameClickActivationSupportsLegacyWebKitExceptForPrompts() {
+        for action in [nil, "primary", "card:0", "prompt"] as [String?] {
+            for lastTap in [nil, 98.9, 99, 99.5, 100, 100.1] as [TimeInterval?] {
+                let recent = lastTap.map { (99...100).contains($0) } ?? false
+                for unknown in [[:], ["activated": NSNull()]] as [[String: Any]] {
+                    XCTAssertEqual(FrameShell.allowsClick(unknown, action: action, lastNativeTap: lastTap, now: 100),
+                                   action != "prompt" && recent)
+                }
+                XCTAssertFalse(FrameShell.allowsClick(["activated": false], action: action, lastNativeTap: lastTap, now: 100))
+                XCTAssertTrue(FrameShell.allowsClick(["activated": true], action: action, lastNativeTap: lastTap, now: 100))
+                XCTAssertFalse(FrameShell.allowsClick(["activated": "true"], action: action, lastNativeTap: lastTap, now: 100))
+            }
+        }
+    }
+
     func ad(_ json: String) throws -> AdResponse { try JSONDecoder().decode(AdResponse.self, from: Data(json.utf8)) }
 
     func testSelectedRenderPrecedesLegacyCompositionAndRoutesCardURLs() throws {
@@ -74,7 +89,7 @@ final class FramePolicyTests: XCTestCase {
         XCTAssertFalse(shell.contains("allow-same-origin"))
         XCTAssertFalse(shell.contains("allow-popups"))
         XCTAssertTrue(shell.contains("event.source!==frame.contentWindow"))
-        XCTAssertTrue(shell.contains("navigator.userActivation?.isActive===true"))
+        XCTAssertTrue(shell.contains("navigator.userActivation?navigator.userActivation.isActive===true:null"))
         XCTAssertFalse(shell.contains("impUrl"))
         XCTAssertFalse(shell.contains("prompt:"))
     }

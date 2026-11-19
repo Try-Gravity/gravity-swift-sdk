@@ -1,4 +1,12 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import XCTest
+#if canImport(UIKit) && canImport(WebKit) && os(iOS)
+import UIKit
+import WebKit
+#endif
 @testable import GravitySDK
 
 final class ViewabilityBeaconTests: XCTestCase {
@@ -71,6 +79,95 @@ private final class BeaconRecordingURLProtocol: URLProtocol {
 }
 
 final class ViewabilityBeaconSendTests: XCTestCase {
+    #if canImport(UIKit) && canImport(WebKit) && os(iOS)
+    @MainActor
+    func testUIKitFrameInstallsSharedProbeAndDisposesItWithoutBilling() throws {
+        let gravity = makeGravity()
+        let ad = try JSONDecoder().decode(AdResponse.self, from: Data(
+            #"{"impUrl":"https://ads.test/imp/\#(UUID().uuidString)?p=1","render":{"mode":"iframe","frameUrl":"https://frames.example/frame/test"}}"#.utf8
+        ))
+        let frame = GravityFrameView(frame: CGRect(x: 0, y: 0, width: 320, height: 160))
+        frame.configure(ad: ad, gravity: gravity, sessionId: "test")
+        let web = try XCTUnwrap(frame.subviews.compactMap { $0 as? WKWebView }.first)
+        let probe = try XCTUnwrap(frame.subviews.compactMap { $0 as? AdProbeView }.first)
+        XCTAssertFalse(probe.isOpaque)
+        XCTAssertEqual(probe.backgroundColor, .clear)
+        XCTAssertLessThan(try XCTUnwrap(frame.subviews.firstIndex(of: probe)),
+                          try XCTUnwrap(frame.subviews.firstIndex(of: web)))
+        let tap = try XCTUnwrap(web.gestureRecognizers?.compactMap { $0 as? UITapGestureRecognizer }
+            .first { $0.delegate === frame })
+        XCTAssertFalse(tap.cancelsTouchesInView)
+        XCTAssertFalse(tap.delaysTouchesEnded)
+        XCTAssertTrue(frame.gestureRecognizer(tap, shouldRecognizeSimultaneouslyWith: web.scrollView.panGestureRecognizer))
+        XCTAssertFalse(probe.isUserInteractionEnabled)
+        XCTAssertNotNil(probe.onRefresh)
+        probe.onRefresh?()
+        XCTAssertFalse(gravity.hasFiredImpression(ad))
+        XCTAssertTrue(BeaconRecordingURLProtocol.urls.isEmpty)
+        frame.dispose()
+        XCTAssertNil(probe.superview)
+        XCTAssertNil(probe.onRefresh)
+        XCTAssertFalse(frame.hasActiveFrameResources)
+    }
+    #endif
+
+    func testSharedFrameObservationWaitsForPixelAndDeduplicatesWithSwiftUI() async throws {
+        let gravity = makeGravity()
+        let ad = try makeAd(impUrl: "https://ads.test/imp/\(UUID().uuidString)?p=1")
+        var dwellActions: [() -> Void] = []
+        let observations = (0..<2).map { _ in
+            ViewabilityObservation(tracker: ViewabilityTracker(scheduler: { delay, action in
+                XCTAssertEqual(delay, 1)
+                dwellActions.append(action)
+                return {}
+            }))
+        }
+        for observation in observations {
+            observation.setAd(ad, gravity: gravity)
+            observation.tracker.isAttached = true
+            observation.tracker.isActive = true
+            XCTAssertTrue(observation.refresh { (0.49, true) })
+        }
+        XCTAssertTrue(dwellActions.isEmpty)
+        XCTAssertTrue(BeaconRecordingURLProtocol.urls.isEmpty)
+        for observation in observations {
+            XCTAssertTrue(observation.refresh { (0.5, true) })
+        }
+        XCTAssertEqual(dwellActions.count, 2)
+        dwellActions.forEach { $0() }
+        try await waitForBeacons(1)
+        XCTAssertEqual(BeaconRecordingURLProtocol.urls.count, 1)
+        XCTAssertTrue(BeaconRecordingURLProtocol.urls[0].absoluteString.contains("ev=viewable"))
+        for observation in observations {
+            XCTAssertTrue(observation.refresh { XCTFail("Wait for the pixel without measuring"); return nil })
+        }
+        gravity.trackImpression(ad)
+        for observation in observations {
+            XCTAssertFalse(observation.refresh { (0.5, true) })
+        }
+        try await waitForBeacons(3)
+        let urls = BeaconRecordingURLProtocol.urls
+        XCTAssertEqual(urls.count, 3)
+        XCTAssertEqual(urls.filter { $0.absoluteString == ad.impUrl }.count, 1)
+        XCTAssertEqual(urls.filter { $0.absoluteString.contains("ev=measured") }.count, 1)
+        XCTAssertEqual(urls.filter { $0.absoluteString.contains("ev=viewable") }.count, 1)
+    }
+
+    func testSharedObservationWithoutImpressionOrMeasurementSendsNothing() async throws {
+        let gravity = makeGravity()
+        let observation = ViewabilityObservation()
+        observation.setAd(try makeAd(impUrl: nil), gravity: gravity)
+        observation.tracker.isAttached = true
+        observation.tracker.isActive = true
+        XCTAssertFalse(observation.refresh { nil })
+        XCTAssertTrue(BeaconRecordingURLProtocol.urls.isEmpty)
+        let ad = try makeAd(impUrl: "https://ads.test/imp/\(UUID().uuidString)?p=1")
+        observation.setAd(ad, gravity: gravity)
+        XCTAssertTrue(observation.refresh { (0, false) })
+        XCTAssertFalse(observation.tracker.fired)
+        XCTAssertTrue(BeaconRecordingURLProtocol.urls.isEmpty)
+    }
+
     private func makeGravity() -> Gravity {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [BeaconRecordingURLProtocol.self]

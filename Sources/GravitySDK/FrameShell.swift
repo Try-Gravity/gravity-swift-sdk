@@ -1,6 +1,14 @@
 import Foundation
 
 enum FrameShell {
+    static func allowsClick(_ body: [String: Any], action: String?, lastNativeTap: TimeInterval?, now: TimeInterval) -> Bool {
+        if let activated = body["activated"] as? Bool { return activated }
+        guard action != "prompt", body["activated"] == nil || body["activated"] is NSNull,
+              let lastNativeTap else { return false }
+        let elapsed = now - lastNativeTap
+        return elapsed >= 0 && elapsed <= 1
+    }
+
     static func html(url: URL, generation: String) -> String {
         let config = ["src": url.absoluteString, "generation": generation]
         let data = try! JSONSerialization.data(withJSONObject: config, options: [.withoutEscapingSlashes])
@@ -17,7 +25,7 @@ enum FrameShell {
           const m=event.data;
           if(!m||m.__gravity!==1||m.protocol!=='gfb-1')return;
           if(!['ready','resize','click','event'].includes(m.type))return;
-          const body={generation:config.generation,message:m,activated:navigator.userActivation?.isActive===true};
+          const body={generation:config.generation,message:m,activated:navigator.userActivation?navigator.userActivation.isActive===true:null};
           try{window.webkit.messageHandlers.gravityFrame.postMessage(JSON.stringify(body));}catch{}
         });
         window.gravityHostPost=message=>frame.contentWindow.postMessage(message,'*');
