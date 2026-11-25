@@ -834,4 +834,46 @@ final class SpecConformanceTests: XCTestCase {
             XCTAssertNil(RendererSpec.renderableSpec(for: ad), "\(layout): must fall back")
         }
     }
+
+    #if canImport(SwiftUI) && canImport(UIKit) && os(iOS)
+    @MainActor
+    func testEmptyGrowBoxTreatedAsSpacer() throws {
+        let ad = try Self.decodeAd([
+            "title": "T", "adText": "A", "brandName": "Northwind Postgres", "cta": "C",
+            "clickUrl": "https://server.trygravity.ai/c?x=1",
+        ])
+
+        let pureSpacer = SpecNode(
+            type: "box", bind: nil, showIf: nil, text: nil,
+            src: nil, href: nil, style: ["grow": .number(1)], children: nil
+        )
+        XCTAssertTrue(SpecNodeView.isEmptyGrowSpacer(
+            pureSpacer, style: SpecStyle(pureSpacer.style, nodeType: pureSpacer.type), ad: ad
+        ))
+
+        let styledBar = SpecNode(
+            type: "box", bind: nil, showIf: nil, text: nil,
+            src: nil, href: nil,
+            style: ["grow": .number(1), "background": .string("$border"), "height": .string("1px")],
+            children: nil
+        )
+        XCTAssertFalse(SpecNodeView.isEmptyGrowSpacer(
+            styledBar, style: SpecStyle(styledBar.style, nodeType: styledBar.type), ad: ad
+        ))
+
+        let nonEmpty = SpecNode(
+            type: "box", bind: nil, showIf: nil, text: nil,
+            src: nil, href: nil, style: ["grow": .number(1)],
+            children: [
+                SpecNode(
+                    type: "text", bind: "brandName", showIf: nil, text: nil,
+                    src: nil, href: nil, style: nil, children: nil
+                )
+            ]
+        )
+        XCTAssertFalse(SpecNodeView.isEmptyGrowSpacer(
+            nonEmpty, style: SpecStyle(nonEmpty.style, nodeType: nonEmpty.type), ad: ad
+        ))
+    }
+    #endif
 }

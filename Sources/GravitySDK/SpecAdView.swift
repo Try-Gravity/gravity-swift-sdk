@@ -71,7 +71,7 @@ public struct SpecAdView: View {
                         if !specHasDisclosure {
                             Text("Ad")
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(.regularMaterial, in: Capsule())
@@ -79,6 +79,9 @@ public struct SpecAdView: View {
                                 .allowsHitTesting(false)
                         }
                     }
+                    .modifier(SpecCardAccessibility(hasLinks: SpecCardAccessibility.containsLink(spec.root, ad: ad)) {
+                        gravity.handleClick(ad)
+                    })
 
                 // Feedback chrome sits outside the portable spec tree, so
                 // spec-rendered inventory reports the same thumbs signal as
@@ -86,7 +89,7 @@ public struct SpecAdView: View {
                 if showFeedback && !feedbackSent {
                     HStack {
                         Spacer()
-                        HStack(spacing: 12) {
+                        HStack(spacing: FeedbackHitTarget.spacing) {
                             Button {
                                 feedbackSent = true
                                 gravity.sendFeedback(
@@ -97,8 +100,11 @@ public struct SpecAdView: View {
                                 Image(systemName: "hand.thumbsup")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .modifier(FeedbackHitTarget())
                             }
                             .buttonStyle(.plain)
+                            .padding(FeedbackHitTarget.layoutInset)
+                            .accessibilityLabel("Like this ad")
 
                             Button {
                                 feedbackSent = true
@@ -111,18 +117,54 @@ public struct SpecAdView: View {
                                 Image(systemName: "hand.thumbsdown")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .modifier(FeedbackHitTarget())
                             }
                             .buttonStyle(.plain)
+                            .padding(FeedbackHitTarget.layoutInset)
+                            .accessibilityLabel("Not interested in this ad")
                         }
                     }
                 }
             }
+            // Spec text follows Dynamic Type up to the largest standard size;
+            // spec layouts use fixed widths, so accessibility sizes are capped.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .background(NativeImpressionProbe(ad: ad, gravity: gravity).allowsHitTesting(false))
             .trackViewability(of: ad, gravity: gravity)
         } else {
             // GravityAdView fires its own impression pixel on appear and
             // owns the feedback chrome on the fallback path.
             GravityAdView(ad: ad, gravity: gravity, sessionId: sessionId, showFeedback: showFeedback, enableFrames: false)
+        }
+    }
+}
+
+/// A spec with any `link` node already exposes each link as its own
+/// VoiceOver button that resolves its own destination, so it is left as is.
+/// A spec without links only has the card-wide tap gesture, so it is exposed
+/// as one link element, disclosure included, whose activation runs the same
+/// tracked click as the tap.
+struct SpecCardAccessibility: ViewModifier {
+    let hasLinks: Bool
+    let activate: () -> Void
+
+    /// Whether a `link` node renders for this ad. Only boxes paint their
+    /// children, and a subtree whose `showIf` field is empty renders nothing,
+    /// so links anywhere else don't count.
+    static func containsLink(_ node: SpecNode, ad: AdResponse) -> Bool {
+        if let gate = node.showIf, (SpecBinding.fieldValue(ad, gate) ?? "").isEmpty { return false }
+        return node.type == "link" || (node.type == "box" && (node.children ?? []).contains { containsLink($0, ad: ad) })
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if hasLinks {
+            content
+        } else {
+            content
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isLink)
+                .accessibilityAction { activate() }
         }
     }
 }
@@ -135,6 +177,7 @@ struct SpecNodeView: View {
     let ad: AdResponse
     let gravity: Gravity
     let theme: GravityTheme
+    @ScaledMetric(relativeTo: .body) var typeScale: CGFloat = 1
 
     var body: some View {
         if let gate = node.showIf,
@@ -202,7 +245,7 @@ struct SpecNodeView: View {
     /// gating in `body`/`content`. Children that render `EmptyView()` must
     /// not contribute spacers, or hidden pieces would leave phantom
     /// flexible space that shoves visible siblings around.
-    private func willRender(_ node: SpecNode) -> Bool {
+    static func willRender(_ node: SpecNode, ad: AdResponse) -> Bool {
         if let gate = node.showIf,
            (SpecBinding.fieldValue(ad, gate) ?? "").isEmpty {
             return false
@@ -219,9 +262,29 @@ struct SpecNodeView: View {
         }
     }
 
+    /// An empty `box` with `grow: 1` and no visual chrome or explicit size is a
+    /// pure flex spacer (e.g. `{ type: "box", style: { grow: 1 } }`). Rendering
+    /// it as `.frame(maxWidth: .infinity)` in a SwiftUI `HStack` shares space
+    /// equally with un-prioritized sibling `Text` views and forces labels like
+    /// `brandName` to wrap on narrow phones; `Spacer(minLength: 0)` only takes
+    /// leftover space.
+    static func isEmptyGrowSpacer(_ node: SpecNode, style: SpecStyle, ad: AdResponse) -> Bool {
+        guard node.type == "box", style.grow else { return false }
+        let hasRenderedChild = (node.children ?? []).contains { willRender($0, ad: ad) }
+        guard !hasRenderedChild else { return false }
+        return style.background == nil
+            && style.borderColor == nil
+            && style.padding == SpecEdges()
+            && style.margin == SpecEdges()
+            && style.width == nil
+            && style.height == nil
+            && style.maxWidth == nil
+            && style.elevation == nil
+    }
+
     @ViewBuilder
     private func childStack(style: SpecStyle) -> some View {
-        let children = (node.children ?? []).filter(willRender)
+        let children = (node.children ?? []).filter { Self.willRender($0, ad: ad) }
         // An omitted `direction` defaults to "row" — the contract-pinned
         // default (PSP1.md), matching the CSS flexbox default. Every
         // interpreter must stack the same way for the same spec.
@@ -255,7 +318,9 @@ struct SpecNodeView: View {
             // flex-grow/flex-shrink: horizontal in a row, vertical in a
             // column. A cross-axis fixedSize would pin text to its unwrapped
             // intrinsic width and clip copy.
-            if childStyle.grow {
+            if Self.isEmptyGrowSpacer(child, style: childStyle, ad: ad) {
+                Spacer(minLength: 0)
+            } else if childStyle.grow {
                 SpecNodeView(node: child, ad: ad, gravity: gravity, theme: theme)
                     .frame(
                         maxWidth: style.direction == "column" ? nil : .infinity,
@@ -298,7 +363,7 @@ struct SpecNodeView: View {
     }
 
     private func styledText(_ content: String, style: SpecStyle) -> some View {
-        let size = CGFloat(style.fontSize ?? 14)
+        let size = CGFloat(style.fontSize ?? 14) * typeScale
         var text = Text(style.uppercase ? content.uppercased() : content)
             .font(.system(size: size, weight: fontWeight(style.fontWeight)))
         if style.underline {
@@ -319,7 +384,7 @@ struct SpecNodeView: View {
             .foregroundColor(theme.resolve(style.color))
             .lineLimit(style.nowrap ? 1 : nil)
             .fixedSize(horizontal: false, vertical: true)
-            .lineSpacing(style.lineHeight.map { CGFloat(($0 - 1) * (style.fontSize ?? 14)) } ?? 0)
+            .lineSpacing(style.lineHeight.map { CGFloat($0 - 1) * size } ?? 0)
             .multilineTextAlignment(textAlignment(style.textAlign))
     }
 
