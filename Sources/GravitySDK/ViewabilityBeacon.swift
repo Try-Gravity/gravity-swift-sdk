@@ -10,7 +10,7 @@ enum ViewabilityBeacon {
     }
 
     static let sdkName = "ios"
-    static let sdkVersion = "1.2.2"
+    static let sdkVersion = "1.3.0"
     static let sent = ViewabilityBeaconLog(capacity: 1000)
 
     /// The impression URL with `ev`, `sdk` and `sv` appended; every existing

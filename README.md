@@ -187,12 +187,14 @@ Gravity(
 
 If your app uses an IAB-registered CMP (OneTrust, Sourcepoint, Usercentrics, …),
 the SDK automatically forwards the user's recorded decision — the standard
-`IABTCF_TCString`, `IABTCF_gdprApplies`, and `IABUSPrivacy_String` UserDefaults
-keys — with each ad request so Gravity's serving can take it into account as
+`IABTCF_TCString`, `IABTCF_gdprApplies`, `IABUSPrivacy_String`,
+`IABGPP_HDR_GppString`, and `IABGPP_GppSID` UserDefaults keys — with each ad request so Gravity's serving can take it into account as
 consent enforcement rolls out server-side. No CMP keys present → no
 consent data is sent. To disable the automatic read, initialize with
 `readCMPConsent: false`; you can still pass an explicit `consent:` signal to
-`getAds()`.
+`getAds()`, for example
+`ConsentSignal(gpc: true, gpp: gppString, gppSid: [7])`. An explicit signal
+replaces the CMP values.
 
 ## Development
 

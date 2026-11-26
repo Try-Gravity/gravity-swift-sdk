@@ -291,6 +291,22 @@ final class NativeFrameTests: XCTestCase {
         adapter.dispose()
         XCTAssertEqual(adapter.subviews.count, 0)
     }
+
+    func testSpecTextFollowsDynamicTypeUpToLargestStandardSize() throws {
+        let ad = try JSONDecoder().decode(AdResponse.self, from: Data(#"{"brandName":"Fixture","title":"A spec card","adText":"Local fixture content that wraps across a few lines of the card.","cta":"Explore","url":"https://example.com","clickUrl":"https://tracking.invalid/click","renderer_spec":{"version":1,"name":"psp1-card","root":{"type":"link","bind":"url","style":{"direction":"column","gap":"10px","padding":"16px 18px","background":"$card","border":"1px solid $border","borderRadius":"$radius","width":"100%"},"children":[{"type":"box","style":{"direction":"row","align":"center","justify":"space-between","gap":"12px"},"children":[{"type":"box","style":{"direction":"row","align":"center","gap":"8px","minWidth":0},"children":[{"type":"image","bind":"favicon","showIf":"favicon","style":{"width":"20px","height":"20px","borderRadius":"4px","fit":"contain","shrink":0}},{"type":"text","bind":"brandName","showIf":"brandName","style":{"fontSize":"12px","fontWeight":600,"color":"$muted-foreground","lineHeight":1.3}},{"type":"text","text":"AD","style":{"fontSize":"10px","fontWeight":600,"letterSpacing":"0.04em","color":"$muted-foreground","lineHeight":1,"shrink":0}}]},{"type":"box","showIf":"cta","style":{"direction":"row","align":"center","justify":"center","shrink":0,"padding":"8px 16px","background":"$primary","borderRadius":"full","textDecoration":"none"},"children":[{"type":"text","bind":"cta","style":{"fontSize":"13px","fontWeight":600,"color":"$primary-foreground","lineHeight":1,"nowrap":true}}]}]},{"type":"box","style":{"direction":"column","gap":"6px","minWidth":0},"children":[{"type":"text","bind":"title","showIf":"title","style":{"fontSize":"16px","fontWeight":600,"lineHeight":1.3,"color":"$foreground"}},{"type":"text","bind":"adText","showIf":"adText","style":{"fontSize":"13px","color":"$muted-foreground","lineHeight":1.5}}]}]}}}"#.utf8))
+        XCTAssertNotNil(RendererSpec.renderableSpec(for: ad))
+        let gravity = Gravity(apiKey: "fixture", readCMPConsent: false, honorATT: false)
+        func height(_ size: DynamicTypeSize) -> CGFloat {
+            let view = SpecAdView(ad: ad, gravity: gravity, sessionId: "fixture", showFeedback: false)
+                .environment(\.dynamicTypeSize, size)
+            return UIHostingController(rootView: view).view
+                .sizeThatFits(CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)).height
+        }
+        let standard = height(.large)
+        let largest = height(.xxxLarge)
+        XCTAssertGreaterThan(largest, standard + 8)
+        XCTAssertEqual(height(.accessibility5), largest, accuracy: 0.5)
+    }
 }
 
 private final class NativeFixtureURLProtocol: URLProtocol {
