@@ -8,7 +8,8 @@ import AppTrackingTransparency
 /// When not supplied explicitly, the SDK auto-reads the app's CMP output:
 /// IAB-registered consent SDKs (OneTrust, Sourcepoint, Usercentrics, …)
 /// are required to write the user's decision to standard `UserDefaults`
-/// keys (`IABTCF_TCString`, `IABTCF_gdprApplies`, `IABUSPrivacy_String`),
+/// keys (`IABTCF_TCString`, `IABTCF_gdprApplies`, `IABUSPrivacy_String`,
+/// `IABGPP_HDR_GppString`, `IABGPP_GppSID`),
 /// so consent collected by the publisher's existing banner is forwarded
 /// with zero publisher code. No CMP keys present → no consent field, and
 /// requests are unchanged.
@@ -25,17 +26,25 @@ public struct ConsentSignal: Sendable, Equatable {
     /// serves fully contextual ads and processes no pseudonymous
     /// identifiers.
     public var gpc: Bool?
+    /// IAB Global Privacy Platform (GPP) string collected by the app's CMP.
+    public var gpp: String?
+    /// GPP section ids that apply to this request, e.g. `[7, 8]`.
+    public var gppSid: [Int]?
 
     public init(
         gdprApplies: Bool? = nil,
         tcfString: String? = nil,
         usPrivacy: String? = nil,
-        gpc: Bool? = nil
+        gpc: Bool? = nil,
+        gpp: String? = nil,
+        gppSid: [Int]? = nil
     ) {
         self.gdprApplies = gdprApplies
         self.tcfString = tcfString
         self.usPrivacy = usPrivacy
         self.gpc = gpc
+        self.gpp = gpp
+        self.gppSid = gppSid
     }
 
     /// Read the standard IAB CMP keys from `UserDefaults`.
@@ -54,8 +63,18 @@ public struct ConsentSignal: Sendable, Equatable {
         if let usp = defaults.string(forKey: "IABUSPrivacy_String"), !usp.isEmpty {
             consent.usPrivacy = usp
         }
+        // Per the GPP in-app spec, IABGPP_GppSID joins section ids with "_".
+        if let gpp = defaults.string(forKey: "IABGPP_HDR_GppString"), !gpp.isEmpty {
+            consent.gpp = gpp
+        }
+        if let sid = defaults.string(forKey: "IABGPP_GppSID") {
+            let parts = sid.split(separator: "_")
+            let ids = parts.compactMap { Int($0) }
+            if !ids.isEmpty, ids.count == parts.count { consent.gppSid = ids }
+        }
 
-        if consent.gdprApplies == nil, consent.tcfString == nil, consent.usPrivacy == nil {
+        if consent.gdprApplies == nil, consent.tcfString == nil, consent.usPrivacy == nil,
+           consent.gpp == nil {
             return nil
         }
         return consent
@@ -99,6 +118,8 @@ public struct ConsentSignal: Sendable, Equatable {
         if let tcfString { dict["tcfString"] = tcfString }
         if let usPrivacy { dict["usPrivacy"] = usPrivacy }
         if let gpc { dict["gpc"] = gpc }
+        if let gpp { dict["gpp"] = gpp }
+        if let gppSid { dict["gppSid"] = gppSid }
         return dict
     }
 }

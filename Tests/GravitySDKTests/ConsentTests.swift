@@ -97,6 +97,78 @@ final class ConsentTests: XCTestCase {
         XCTAssertEqual((explicit["consent"] as? [String: Any])?["usPrivacy"] as? String, "1YNN")
     }
 
+    func testReadsGPPStringAndSectionIds() {
+        defaults.set("DBABMA~CPtest", forKey: "IABGPP_HDR_GppString")
+        defaults.set("7_8", forKey: "IABGPP_GppSID")
+
+        let consent = ConsentSignal.fromCMP(defaults)
+        XCTAssertEqual(consent?.gpp, "DBABMA~CPtest")
+        XCTAssertEqual(consent?.gppSid, [7, 8])
+        XCTAssertNil(consent?.tcfString)
+    }
+
+    func testUnreadableGPPSectionIdsAreDropped() {
+        defaults.set("DBABMA~CPtest", forKey: "IABGPP_HDR_GppString")
+        defaults.set("7_x", forKey: "IABGPP_GppSID")
+
+        let consent = ConsentSignal.fromCMP(defaults)
+        XCTAssertEqual(consent?.gpp, "DBABMA~CPtest")
+        XCTAssertNil(consent?.gppSid)
+    }
+
+    func testGPPSectionIdsAloneReturnNil() {
+        defaults.set("", forKey: "IABGPP_HDR_GppString")
+        defaults.set("7", forKey: "IABGPP_GppSID")
+
+        XCTAssertNil(ConsentSignal.fromCMP(defaults))
+    }
+
+    func testToDictIncludesGpp() {
+        let dict = ConsentSignal(gpp: "DBABMA~CPtest", gppSid: [7, 8]).toDict()
+        XCTAssertEqual(dict["gpp"] as? String, "DBABMA~CPtest")
+        XCTAssertEqual(dict["gppSid"] as? [Int], [7, 8])
+        XCTAssertNil(ConsentSignal().toDict()["gpp"])
+        XCTAssertNil(ConsentSignal().toDict()["gppSid"])
+    }
+
+    func testRequestBodyCarriesGPPAndExplicitValuesWin() {
+        let standard = UserDefaults.standard
+        standard.set("DBABMA~CPcmp", forKey: "IABGPP_HDR_GppString")
+        standard.set("7", forKey: "IABGPP_GppSID")
+        defer {
+            standard.removeObject(forKey: "IABGPP_HDR_GppString")
+            standard.removeObject(forKey: "IABGPP_GppSID")
+        }
+
+        func consent(_ explicit: ConsentSignal?) -> [String: Any]? {
+            Gravity(apiKey: "k", honorATT: false).buildRequestBody(
+                messages: [Message(role: "user", content: "hi")],
+                sessionId: "s", userId: "u", placements: [.belowResponse()],
+                userIP: nil, hashedIdentity: nil, extraUserFields: nil,
+                extraDeviceFields: nil, production: nil, relevancy: nil,
+                consent: explicit
+            )["consent"] as? [String: Any]
+        }
+
+        let fromCMP = consent(nil)
+        XCTAssertEqual(fromCMP?["gpp"] as? String, "DBABMA~CPcmp")
+        XCTAssertEqual(fromCMP?["gppSid"] as? [Int], [7])
+
+        let explicit = consent(ConsentSignal(gpc: true, gpp: "DBABMA~CPapp", gppSid: [8]))
+        XCTAssertEqual(explicit?["gpp"] as? String, "DBABMA~CPapp")
+        XCTAssertEqual(explicit?["gppSid"] as? [Int], [8])
+        XCTAssertEqual(explicit?["gpc"] as? Bool, true)
+    }
+
+    func testMergingAttOptOutKeepsGpp() {
+        let merged = ConsentSignal.merging(
+            ConsentSignal(gpp: "DBABMA~CPtest", gppSid: [7]), attOptsOut: true
+        )
+        XCTAssertEqual(merged?.gpc, true)
+        XCTAssertEqual(merged?.gpp, "DBABMA~CPtest")
+        XCTAssertEqual(merged?.gppSid, [7])
+    }
+
     func testToDictIncludesGpc() {
         let dict = ConsentSignal(gpc: true).toDict()
         XCTAssertEqual(dict["gpc"] as? Bool, true)

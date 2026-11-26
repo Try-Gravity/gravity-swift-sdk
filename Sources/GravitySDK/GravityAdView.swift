@@ -102,40 +102,50 @@ public struct GravityAdView: View {
 
     private var nativeCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Brand row
-            HStack(spacing: 6) {
-                if let faviconURL = ad.favicon, let url = URL(string: faviconURL) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        Color.gray.opacity(0.2)
+            // VoiceOver reads the brand, disclosure, title and copy as one
+            // element whose activation does what tapping the card does.
+            VStack(alignment: .leading, spacing: 8) {
+                // Brand row
+                HStack(spacing: 6) {
+                    if let faviconURL = ad.favicon, let url = URL(string: faviconURL) {
+                        AsyncImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            Color.gray.opacity(0.2)
+                        }
+                        .frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .accessibilityHidden(true)
                     }
-                    .frame(width: 16, height: 16)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                }
-                if let brand = ad.brandName {
-                    Text(brand)
-                        .font(.caption)
+                    if let brand = ad.brandName {
+                        Text(brand)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    // Secondary, not tertiary: the disclosure must meet the
+                    // 4.5:1 text contrast minimum in light and dark mode.
+                    Text("Ad")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
-                Text("Ad")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
 
-            if let title = ad.title {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                if let title = ad.title {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            if let text = ad.adText {
-                Text(text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let text = ad.adText {
+                    Text(text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(ad.promptAction != nil && onPrompt != nil ? .isButton : .isLink)
+            .accessibilityAction { activate() }
 
             HStack {
                 if let cta = ad.cta {
@@ -152,7 +162,7 @@ public struct GravityAdView: View {
                 Spacer()
 
                 if showFeedback && !feedbackSent {
-                    HStack(spacing: 12) {
+                    HStack(spacing: FeedbackHitTarget.spacing) {
                         Button {
                             feedbackSent = true
                             gravity.sendFeedback(
@@ -163,8 +173,11 @@ public struct GravityAdView: View {
                             Image(systemName: "hand.thumbsup")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .modifier(FeedbackHitTarget())
                         }
                         .buttonStyle(.plain)
+                        .padding(FeedbackHitTarget.layoutInset)
+                        .accessibilityLabel("Like this ad")
 
                         Button {
                             feedbackSent = true
@@ -177,8 +190,11 @@ public struct GravityAdView: View {
                             Image(systemName: "hand.thumbsdown")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .modifier(FeedbackHitTarget())
                         }
                         .buttonStyle(.plain)
+                        .padding(FeedbackHitTarget.layoutInset)
+                        .accessibilityLabel("Not interested in this ad")
                     }
                 }
             }
@@ -190,6 +206,23 @@ public struct GravityAdView: View {
             activate()
         }
         .background(NativeImpressionProbe(ad: ad, gravity: gravity).allowsHitTesting(false))
+    }
+}
+
+/// Gives a small feedback glyph Apple's 44x44 pt minimum hit region: the
+/// label is padded by `inset` on every side (a 12 pt glyph becomes 44 pt) and
+/// the button's negative `layoutInset` gives the padding back, so the row
+/// keeps the glyph's own size at every Dynamic Type size. `spacing` keeps
+/// neighbouring hit regions from overlapping.
+struct FeedbackHitTarget: ViewModifier {
+    static let inset: CGFloat = 16
+    static let layoutInset: CGFloat = -inset
+    static let spacing: CGFloat = 2 * inset
+
+    func body(content: Content) -> some View {
+        content
+            .padding(Self.inset)
+            .contentShape(Rectangle())
     }
 }
 

@@ -52,7 +52,7 @@ public final class Gravity: Sendable {
     ///   - excludedTopics: Topics to exclude from matching.
     ///   - readCMPConsent: When `true` (default), consent recorded by the
     ///     app's IAB-registered CMP (the standard `IABTCF_*` /
-    ///     `IABUSPrivacy_String` UserDefaults keys) is forwarded with ad
+    ///     `IABUSPrivacy_String` / `IABGPP_*` UserDefaults keys) is forwarded with ad
     ///     requests so the server can honor it. Set `false` to never read
     ///     CMP storage; only an explicit `consent:` argument is sent then.
     ///   - honorATT: When `true` (default), the App Tracking Transparency
